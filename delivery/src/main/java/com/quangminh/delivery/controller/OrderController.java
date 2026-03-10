@@ -1,5 +1,6 @@
 package com.quangminh.delivery.controller;
 
+import com.quangminh.delivery.dto.DeliveryCompleteDTO;
 import com.quangminh.delivery.dto.OrderRequestDTO;
 import com.quangminh.delivery.entity.Order;
 import com.quangminh.delivery.service.OrderService;
@@ -26,5 +27,15 @@ public class OrderController {
     @GetMapping
     public ResponseEntity<List<Order>> getAllOrders() {
         return ResponseEntity.ok(orderService.getAllOrders());
+    }
+    @PostMapping("/complete")
+    public ResponseEntity<?> complete(@RequestBody DeliveryCompleteDTO dto) {
+        // Sửa lại để nhận về đối tượng đã update từ Service
+        Order updatedOrder = orderService.completeDelivery(dto);
+        return ResponseEntity.ok(updatedOrder);
+    }
+    @GetMapping("/{id}/report")
+    public ResponseEntity<?> getOrderReport(@PathVariable java.util.UUID id) {
+        return ResponseEntity.ok(orderService.getOrderReport(id));
     }
 }

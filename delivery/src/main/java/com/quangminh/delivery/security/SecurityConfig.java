@@ -28,8 +28,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                        // Chỉ người có Role ADMIN mới được gọi các API /api/orders/**
+
+                        .requestMatchers("/api/orders/complete").hasAnyRole("ADMIN", "DRIVER")
+
                         .requestMatchers("/api/orders/**").hasRole("ADMIN")
+                        .requestMatchers("/api/routes/**").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 );
 
