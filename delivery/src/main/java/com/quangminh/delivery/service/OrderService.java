@@ -10,6 +10,7 @@ import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,15 +22,23 @@ public class OrderService {
     @Autowired
     private OrderRepository orderRepository;
 
+    @Transactional
     public Order createOrder(OrderRequestDTO dto) {
+        // 1. Đếm tổng số đơn hàng hiện có để lấy số thứ tự tiếp theo
+        long currentOrderCount = orderRepository.count();
+        String nextNumber = String.format("%03d", currentOrderCount + 1); // Format thành 001, 002...
+        String autoCode = "ORD-" + nextNumber;
+
         Order order = new Order();
-        order.setOrderCode(dto.getOrderCode());
+        order.setOrderCode(autoCode); // Gán mã tăng dần
+
         order.setCustomerName(dto.getCustomerName());
         order.setCustomerPhone(dto.getCustomerPhone());
         order.setDeliveryAddress(dto.getDeliveryAddress());
         order.setLatitude(dto.getLatitude());
         order.setLongitude(dto.getLongitude());
-        order.setStatus("PENDING"); // Trạng thái mặc định khi Admin tạo đơn
+        order.setStatus("PENDING");
+        order.setCreatedAt(LocalDateTime.now());
 
         return orderRepository.save(order);
     }
@@ -54,8 +63,8 @@ public class OrderService {
 
         // Cập nhật trạng thái thành công/thất bại và tọa độ thực tế
         order.setStatus(dto.getStatus());
-        order.setLatitude(dto.getCurrentLat());
-        order.setLongitude(dto.getCurrentLng());
+        order.setActualLatitude(dto.getActualLatitude());
+        order.setActualLongitude(dto.getActualLongitude());
         orderRepository.save(order);
 
         // Lưu minh chứng ký số nếu giao thành công
@@ -108,5 +117,25 @@ public class OrderService {
         }
 
         return report;
+    }
+    // Thêm/Sửa các hàm này trong OrderService.java
+    public Order getOrderById(UUID id) { // Lỗi 1: Cannot resolve method 'getOrderById'
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
+    }
+
+    public List<Order> getOrdersByDriverId(UUID driverId) { // Lỗi 2: Cannot resolve method 'getOrdersByDriverId'
+        return orderRepository.findByDriverIdAndStatus(driverId, "ASSIGNED");
+    }
+
+    @Transactional
+    public Order completeDelivery(UUID orderId, DeliveryCompleteDTO dto) { // Đảm bảo có 2 tham số (UUID, DTO)
+        Order order = getOrderById(orderId);
+        order.setStatus(dto.getStatus());
+        order.setActualLatitude(dto.getActualLatitude());
+        order.setActualLongitude(dto.getActualLongitude());
+        order.setCheckInTime(LocalDateTime.now());
+        order.setEvidenceImage(dto.getEvidenceImage());
+        return orderRepository.save(order);
     }
 }

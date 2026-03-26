@@ -10,6 +10,7 @@ import java.util.UUID;
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder // Thêm Builder để thuận tiện tạo object trong Unit Test
 public class Order {
 
     @Id
@@ -28,9 +29,31 @@ public class Order {
     @Column(name = "delivery_address", columnDefinition = "TEXT")
     private String deliveryAddress;
 
-    private Double latitude; // Vĩ độ
-    private Double longitude; // Kinh độ
+    // --- Tọa độ Admin thiết lập (Kế hoạch) ---
+    private Double latitude;
+    private Double longitude;
 
+    // --- Thông tin thực tế tài xế Check-in (Đối soát) ---
+    @Column(name = "actual_latitude")
+    private Double actualLatitude;
+
+    @Column(name = "actual_longitude")
+    private Double actualLongitude;
+
+    @Column(name = "check_in_time")
+    private LocalDateTime checkInTime;
+
+    @Column(name = "evidence_image", columnDefinition = "TEXT")
+    private String evidenceImage; // Lưu link ảnh hoặc Base64 ảnh minh chứng
+
+    // --- Dữ liệu phục vụ Ký số (Digital Signature) ---
+    @Column(name = "hash_value", columnDefinition = "TEXT")
+    private String hashValue; // Mã SHA-256 của biên bản
+
+    @Column(name = "signature_value", columnDefinition = "TEXT")
+    private String signatureValue; // Chữ ký số sau khi ký bằng Private Key
+
+    // --- Quản lý trạng thái & Phân quyền ---
     @Column(length = 30)
     private String status; // PENDING, ASSIGNED, DELIVERED, FAILED
 
@@ -38,9 +61,16 @@ public class Order {
     @JoinColumn(name = "assigned_driver_id")
     private User driver;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "route_id")
+    private Route route;
+
     @Column(name = "delivery_sequence")
     private Integer deliverySequence;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }

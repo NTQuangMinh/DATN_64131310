@@ -56,7 +56,7 @@ public class RouteService {
             stop.setOrder(order);
             stop.setStopOrder(i + 1); // Thứ tự giao hàng từ 1 đến n
             routeStopRepository.save(stop);
-
+            order.setRoute(route);
             // Cập nhật thông tin phân công vào Đơn hàng
             order.setStatus("ASSIGNED");
             order.setDriver(driver);
@@ -66,4 +66,5 @@ public class RouteService {
 
         return route;
     }
+
 }
