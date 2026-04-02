@@ -13,19 +13,29 @@ const Login = () => {
         e.preventDefault();
         setError('');
         try {
-            // Gọi API Đăng nhập
+            // 1. Gọi API Đăng nhập
             const response = await axiosInstance.post('/auth/login', { username, password });
             
-            // Lưu token vào localStorage để dùng cho các request sau
-            localStorage.setItem('token', response.data.token);
+            // 2. Phân tách dữ liệu từ Backend (token và object user)
+            const { token, user } = response.data;
+
+            // 3. Lưu vào localStorage
+            localStorage.setItem('token', token);
+            // Quan trọng: Phải chuyển object thành string để lưu
+            localStorage.setItem('user', JSON.stringify(user));
             localStorage.setItem('username', username);
             
-            // Chuyển hướng sang trang Dashboard
-            navigate('/dashboard');
+            // 4. Chuyển hướng dựa trên Role của User
+            if (user.role === 'DRIVER') {
+                navigate('/driver/tasks');
+            } else {
+                navigate('/dashboard');
+            }
+            
         } catch (err: any) {
-            // Xử lý lỗi đăng nhập (Sai tài khoản, mật khẩu hoặc lỗi 403)
+            console.error("Login error:", err);
             if (err.response && err.response.status === 403) {
-                setError('Tài khoản không có quyền truy cập Admin hoặc bị khóa.');
+                setError('Tài khoản không có quyền truy cập hoặc bị khóa.');
             } else {
                 setError('Sai tên đăng nhập hoặc mật khẩu!');
             }
@@ -34,52 +44,57 @@ const Login = () => {
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-100 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+            <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-200">
                 <div className="text-center mb-8">
-                    <div className="bg-blue-100 text-blue-600 p-4 rounded-full inline-block mb-4">
+                    <div className="bg-blue-600 text-white p-4 rounded-2xl inline-block mb-4 shadow-lg shadow-blue-200">
                         <Lock size={32} />
                     </div>
-                    <h1 className="text-3xl font-bold text-slate-900">Delivery Admin</h1>
-                    <p className="text-slate-500 mt-2">Đăng nhập để quản lý hệ thống</p>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Delivery System</h1>
+                    <p className="text-slate-500 mt-2 font-medium">Vui lòng đăng nhập để tiếp tục</p>
                 </div>
                 
-                <form onSubmit={handleLogin} className="space-y-6">
+                <form onSubmit={handleLogin} className="space-y-5">
                     {error && (
-                        <div className="bg-red-100 text-red-700 p-3 rounded-lg text-sm border border-red-200">
+                        <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm border border-red-100 font-medium">
                             {error}
                         </div>
                     )}
                     
-                    <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                        <input
-                            type="text"
-                            placeholder="Tên đăng nhập"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition"
-                            required
-                        />
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">Tên đăng nhập</label>
+                        <div className="relative">
+                            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="text"
+                                placeholder="Nhập username"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                                required
+                            />
+                        </div>
                     </div>
                     
-                    <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                        <input
-                            type="password"
-                            placeholder="Mật khẩu"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition"
-                            required
-                        />
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">Mật khẩu</label>
+                        <div className="relative">
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="password"
+                                placeholder="Nhập mật khẩu"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                                required
+                            />
+                        </div>
                     </div>
                     
                     <button
                         type="submit"
-                        className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition duration-200"
-                    
+                        className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition duration-300 shadow-lg shadow-blue-200 mt-2"
                     >
-                        Đăng nhập
+                        Đăng nhập hệ thống
                     </button>
                 </form>
             </div>
