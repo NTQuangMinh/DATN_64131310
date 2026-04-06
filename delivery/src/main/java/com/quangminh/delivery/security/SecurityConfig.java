@@ -44,6 +44,8 @@ public class SecurityConfig {
 
                         // --- ƯU TIÊN: CÁC API CHO TÀI XẾ PHẢI ĐẶT TRƯỚC ---
 
+                        .requestMatchers("/api/orders/stats").hasAnyRole("ADMIN", "DRIVER")
+
                         // Lấy danh sách nhiệm vụ của tôi
                         .requestMatchers("/api/orders/my-tasks").hasAnyRole("ADMIN", "DRIVER")
 

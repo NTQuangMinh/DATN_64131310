@@ -19,8 +19,6 @@ public class OrderController {
     @Autowired
     private OrderService orderService;
 
-    // --- API CHO ADMIN ---
-
     @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody OrderRequestDTO dto) {
         return ResponseEntity.ok(orderService.createOrder(dto));
@@ -36,12 +34,15 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrderById(id));
     }
 
-    // --- API CHO TÀI XẾ (Tuần 6 & 7) ---
-
     @GetMapping("/my-tasks")
     public ResponseEntity<List<Order>> getMyTasks(@RequestParam UUID driverId) {
         // Tạm thời nhận driverId từ RequestParam để test, sau này sẽ lấy từ JWT
         return ResponseEntity.ok(orderService.getOrdersByDriverId(driverId));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Long>> getStats() {
+        return ResponseEntity.ok(orderService.getOrderStatistics());
     }
 
     @PostMapping("/{id}/complete")
@@ -50,8 +51,6 @@ public class OrderController {
             @RequestBody DeliveryCompleteDTO dto) {
         return ResponseEntity.ok(orderService.completeDelivery(id, dto));
     }
-
-    // --- API ĐỐI SOÁT & VERIFY (Tuần 10) ---
 
     @GetMapping("/{id}/report")
     public ResponseEntity<Map<String, Object>> getOrderReport(@PathVariable UUID id) {

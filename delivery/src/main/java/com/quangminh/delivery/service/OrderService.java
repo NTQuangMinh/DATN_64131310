@@ -138,4 +138,15 @@ public class OrderService {
         order.setEvidenceImage(dto.getEvidenceImage());
         return orderRepository.save(order);
     }
+
+    public Map<String, Long> getOrderStatistics() {
+        Map<String, Long> stats = new HashMap<>();
+
+        stats.put("total", orderRepository.count());
+        stats.put("pending", orderRepository.countByStatus("PENDING"));
+        stats.put("delivering", orderRepository.countByStatus("DELIVERING"));
+        stats.put("completed", orderRepository.countByStatus("DELIVERED"));
+
+        return stats;
+    }
 }

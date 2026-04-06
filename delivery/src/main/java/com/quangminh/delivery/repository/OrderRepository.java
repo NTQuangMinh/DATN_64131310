@@ -23,4 +23,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     // 4. Tìm các đơn hàng đã hoàn thành để phục vụ đối soát và Verify (Tuần 10)
     List<Order> findByStatus(String status);
+
+    long countByStatus(String status);
 }
