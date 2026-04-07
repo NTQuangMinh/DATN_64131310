@@ -1,116 +1,185 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   View, Text, FlatList, StyleSheet, TouchableOpacity, 
-  Linking, Platform, Alert, ActivityIndicator, RefreshControl 
+  Alert, Dimensions, ActivityIndicator 
 } from 'react-native';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
+
+const { width, height } = Dimensions.get('window');
 
 const OrderListScreen = ({ navigation, onLogout }: any) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [driverLocation, setDriverLocation] = useState<any>(null);
+  const [routeCoords, setRouteCoords] = useState<any[]>([]); // Toạ độ đường đi
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
-    fetchOrders();
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Lỗi', 'Cần quyền vị trí để dẫn đường');
+        return;
+      }
+
+      // Theo dõi vị trí tài xế real-time
+      Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+        (loc) => {
+          setDriverLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.015,
+            longitudeDelta: 0.015,
+          });
+        }
+      );
+      fetchOrders();
+    })();
   }, []);
 
   const fetchOrders = async () => {
     try {
-      setLoading(true);
       const userId = await AsyncStorage.getItem('userId');
-      if (!userId) return;
-
       const response = await axiosInstance.get(`/orders/my-tasks?driverId=${userId}`);
-      console.log("Đã nhận dữ liệu thật!");
       setOrders(response.data);
-    } catch (error: any) {
-      console.log("Lỗi tải đơn hàng:", error.message);
+    } catch (error) {
+      console.log("Lỗi fetch đơn:", error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  const openMap = (item: any) => {
-    // Lấy đúng theo LOG: latitude và longitude nằm ở ngoài
-    const lat = item.latitude;
-    const lng = item.longitude;
-    const addr = item.deliveryAddress;
+  // HÀM LẤY ĐƯỜNG ĐI MIỄN PHÍ TỪ OSRM
+  const getRoute = async (order: any) => {
+    if (!driverLocation) return;
+    
+    setSelectedOrder(order);
+    const start = `${driverLocation.longitude},${driverLocation.latitude}`;
+    const end = `${order.longitude},${order.latitude}`;
+    
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${start};${end}?overview=full&geometries=geojson`;
+      const resp = await fetch(url);
+      const json = await resp.json();
 
-    if (lat && lng) {
-      const label = encodeURIComponent(addr || "Điểm giao hàng");
-      const url = Platform.select({
-        ios: `maps:0,0?q=${label}@${lat},${lng}`,
-        android: `geo:${lat},${lng}?q=${lat},${lng}(${label})`,
-      });
-      Linking.openURL(url!);
-    } else {
-      Alert.alert("Lỗi", "Đơn hàng không có tọa độ GPS");
+      if (json.routes && json.routes.length > 0) {
+        // Chuyển đổi GeoJSON thành mảng toạ độ cho Polyline
+        const points = json.routes[0].geometry.coordinates.map((coord: any) => ({
+          latitude: coord[1],
+          longitude: coord[0],
+        }));
+        setRouteCoords(points);
+
+        // Tự động zoom bản đồ bao quát cả đường đi
+        mapRef.current?.fitToCoordinates(points, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        });
+      }
+    } catch (error) {
+      console.log("Lỗi OSRM:", error);
+      Alert.alert("Lỗi", "Không thể tìm đường đi lúc này.");
     }
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Nhiệm vụ 🚛</Text>
-        <TouchableOpacity onPress={onLogout} style={styles.logoutBtn}>
-          <Text style={{color: 'red', fontWeight: 'bold'}}>Thoát</Text>
-        </TouchableOpacity>
+      {/* PHẦN 1: BẢN ĐỒ MIỄN PHÍ */}
+      <View style={styles.mapContainer}>
+        {driverLocation ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={driverLocation}
+            showsUserLocation={true}
+          >
+            {/* Sử dụng dữ liệu bản đồ mở OpenStreetMap */}
+            <UrlTile
+              urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maximumZ={19}
+              flipY={false}
+            />
+
+            {/* Vẽ Marker cho các đơn hàng */}
+            {orders.map((order) => (
+              <Marker
+                key={order.id}
+                coordinate={{ latitude: order.latitude, longitude: order.longitude }}
+                onPress={() => getRoute(order)}
+                title={order.orderCode}
+              >
+                <View style={[styles.marker, selectedOrder?.id === order.id && styles.activeMarker]}>
+                  <Text>📦</Text>
+                </View>
+              </Marker>
+            ))}
+
+            {/* VẼ ĐƯỜNG ĐI MÀU XANH */}
+            {routeCoords.length > 0 && (
+              <Polyline
+                coordinates={routeCoords}
+                strokeWidth={5}
+                strokeColor="#007AFF"
+              />
+            )}
+          </MapView>
+        ) : (
+          <ActivityIndicator size="large" style={{ flex: 1 }} />
+        )}
       </View>
 
-      <FlatList
-        data={orders}
-        keyExtractor={(item) => item.id.toString()}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true); fetchOrders();}} />}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            {/* Dùng orderCode nếu muốn hiển thị mã đẹp hơn */}
-            <Text style={styles.orderId}>Mã đơn: {item.orderCode || item.id.substring(0, 8)}</Text>
-            
-            {/* KHỚP LOG: item.customerName */}
-            <Text style={styles.info}>
-              👤 Khách: <Text style={styles.bold}>{item.customerName || "Không rõ tên"}</Text>
-            </Text>
+      {/* PHẦN 2: DANH SÁCH ĐƠN HÀNG */}
+      <View style={styles.listContainer}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Lộ trình của bạn</Text>
+          <TouchableOpacity onPress={onLogout}><Text style={{color: 'red'}}>Thoát</Text></TouchableOpacity>
+        </View>
 
-            {/* KHỚP LOG: item.deliveryAddress */}
-            <Text style={styles.info}>
-              📍 Đ/C: <Text style={styles.bold}>{item.deliveryAddress || "Không có địa chỉ"}</Text>
-            </Text>
-            
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.btnMap} onPress={() => openMap(item)}>
-                <Text style={styles.btnText}>🗺 Dẫn đường</Text>
-              </TouchableOpacity>
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={[styles.card, selectedOrder?.id === item.id && styles.selectedCard]} 
+              onPress={() => getRoute(item)}
+            >
+              <View style={{flex: 1}}>
+                <Text style={styles.orderCode}>{item.orderCode}</Text>
+                <Text style={styles.addr} numberOfLines={1}>📍 {item.deliveryAddress}</Text>
+              </View>
               <TouchableOpacity 
-                style={styles.btnConfirm} 
+                style={styles.confirmBtn}
                 onPress={() => navigation.navigate('DeliveryConfirm', { orderId: item.id })}
               >
-                <Text style={styles.btnText}>✍️ Xác nhận</Text>
+                <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>Xác nhận</Text>
               </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={<Text style={styles.empty}>Không có đơn hàng nào.</Text>}
-      />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f2f7', paddingHorizontal: 15 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 60, marginBottom: 20, alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: 'bold' },
-  logoutBtn: { padding: 8, backgroundColor: '#ffe5e5', borderRadius: 8 },
-  card: { backgroundColor: '#fff', borderRadius: 15, padding: 16, marginBottom: 15, elevation: 3 },
-  orderId: { fontSize: 16, fontWeight: 'bold', color: '#007AFF', marginBottom: 8 },
-  info: { fontSize: 15, marginBottom: 5, color: '#444' },
-  bold: { fontWeight: 'bold', color: '#000' },
-  btnRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
-  btnMap: { backgroundColor: '#34C759', flex: 0.48, padding: 12, borderRadius: 10, alignItems: 'center' },
-  btnConfirm: { backgroundColor: '#007AFF', flex: 0.48, padding: 12, borderRadius: 10, alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: 'bold' },
-  empty: { textAlign: 'center', marginTop: 50, color: '#8e8e93' }
+  container: { flex: 1, backgroundColor: '#fff' },
+  mapContainer: { height: height * 0.45 },
+  map: { ...StyleSheet.absoluteFillObject },
+  marker: { backgroundColor: '#fff', padding: 5, borderRadius: 20, borderWidth: 1, borderColor: '#007AFF' },
+  activeMarker: { backgroundColor: '#007AFF', borderColor: '#fff' },
+  listContainer: { flex: 1, backgroundColor: '#f8f9fa', borderTopLeftRadius: 25, borderTopRightRadius: 25, marginTop: -20, padding: 20 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
+  card: { backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', elevation: 2 },
+  selectedCard: { borderColor: '#007AFF', borderWidth: 1 },
+  orderCode: { fontWeight: 'bold', fontSize: 15, color: '#007AFF' },
+  addr: { color: '#666', fontSize: 13, marginTop: 4 },
+  confirmBtn: { backgroundColor: '#007AFF', padding: 10, borderRadius: 8, marginLeft: 10 }
 });
 
 export default OrderListScreen;
