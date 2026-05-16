@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoginScreen from './src/screens/LoginScreen';
 import OrderListScreen from './src/screens/OrderListScreen';
 import DeliveryConfirm from './src/screens/DeliveryConfirm';
+import DocuSignWebView from './src/screens/DocuSignWebView'; 
 
 const Stack = createStackNavigator();
 
@@ -24,7 +25,11 @@ export default function App() {
     bootstrap();
   }, []);
 
-  if (isLoading) return <View style={{flex:1, justifyContent:'center'}}><ActivityIndicator size="large" /></View>;
+  if (isLoading) return (
+    <View style={{flex:1, justifyContent:'center'}}>
+      <ActivityIndicator size="large" color="#0000ff" />
+    </View>
+  );
 
   return (
     <SafeAreaProvider>
@@ -40,6 +45,11 @@ export default function App() {
                 {(props) => <OrderListScreen {...props} onLogout={() => setUserToken(null)} />}
               </Stack.Screen>
               <Stack.Screen name="DeliveryConfirm" component={DeliveryConfirm} />
+              <Stack.Screen 
+                name="DocuSignWebView" 
+                component={DocuSignWebView} 
+                options={{ headerShown: true, title: 'Ký xác nhận điện tử' }} 
+              />
             </>
           )}
         </Stack.Navigator>

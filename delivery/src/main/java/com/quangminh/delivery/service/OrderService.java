@@ -53,9 +53,6 @@ public class OrderService {
     @Autowired
     private PdfGeneratorService pdfService;
 
-    @Autowired
-    private SignatureService signatureService;
-
     @Transactional
     public Order completeDelivery(DeliveryCompleteDTO dto) {
         Order order = orderRepository.findById(dto.getOrderId())

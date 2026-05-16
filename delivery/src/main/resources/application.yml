@@ -13,3 +13,12 @@ spring:
         properties:
             hibernate:
                 format_sql: true
+    jackson:
+        serialization:
+            fail-on-empty-beans: false
+docusign:
+    integration-key: "5265a455-9692-46b5-aa1a-e032f87acebf"
+    user-id: "9db850ab-85d2-4ada-8426-0cfdd9fea1a6"
+    account-id: "4c95ce8c-6722-44f9-b5f7-adcd9dc1a13e"
+    private-key-path: "private.key"
+    auth-server: "account-d.docusign.com"

@@ -15,7 +15,6 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
-import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -31,65 +30,58 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // 1. Cấu hình CORS tích hợp vào Security
+                // 1. Cấu hình CORS sử dụng Bean ở dưới
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // 2. Disable CSRF vì dùng JWT
+                // 2. Disable CSRF (Bắt buộc cho API dùng JWT)
                 .csrf(csrf -> csrf.disable())
+                // 3. Quản lý Session là Stateless (Không lưu trạng thái server)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Cho phép yêu cầu OPTIONS (Preflight request) đi qua không cần auth
+                        // Cho phép các yêu cầu OPTIONS (Preflight request của CORS)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // Các URL công khai (Login, Swagger)
                         .requestMatchers("/api/auth/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
 
-                        // --- ƯU TIÊN: CÁC API CHO TÀI XẾ PHẢI ĐẶT TRƯỚC ---
+                        // Endpoint Webhook từ DocuSign
+                        .requestMatchers("/api/orders/docusign/webhook").permitAll()
 
-                        .requestMatchers("/api/orders/stats").hasAnyRole("ADMIN", "DRIVER")
+                        // --- NHÓM QUYỀN CHO TÀI XẾ (VÀ ADMIN) ---
+                        // QUAN TRỌNG: Đưa các endpoint cụ thể lên TRƯỚC endpoint chung /api/orders/**
+                                .requestMatchers("/api/orders/stats").hasAnyRole("ADMIN", "DRIVER")
+                                .requestMatchers("/api/orders/my-tasks").hasAnyRole("ADMIN", "DRIVER")
 
-                        // Lấy danh sách nhiệm vụ của tôi
-                        .requestMatchers("/api/orders/my-tasks").hasAnyRole("ADMIN", "DRIVER")
+                                .requestMatchers("/api/orders/*/signing-url").hasAnyRole("ADMIN", "DRIVER")
+                                .requestMatchers("/api/orders/*/complete").hasAnyRole("ADMIN", "DRIVER")
+                                .requestMatchers("/api/orders/*/report").hasAnyRole("ADMIN", "DRIVER")
 
-                        // Hoàn tất đơn hàng (có chứa ID đơn hàng trong path)
-                        .requestMatchers("/api/orders/*/complete").hasAnyRole("ADMIN", "DRIVER")
-
-                        // Xem báo cáo/biên bản (Tuần 10)
-                        .requestMatchers("/api/orders/*/report").hasAnyRole("ADMIN", "DRIVER")
-
-                        // --- SAU ĐÓ MỚI ĐẾN CÁC API QUẢN TRỊ CỦA ADMIN ---
-
-                        // Tất cả các path còn lại của orders và routes chỉ Admin mới được vào
-                        .requestMatchers("/api/orders/**").hasRole("ADMIN")
-                        .requestMatchers("/api/routes/**").hasRole("ADMIN")
+                                .requestMatchers("/api/orders/**").hasRole("ADMIN")
+                                .requestMatchers("/api/routes/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
                 );
 
+        // Thêm Filter kiểm tra JWT trước khi đến bước xác thực User
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
-    // 3. Định nghĩa chi tiết các nguồn (Origins) được phép truy cập
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // 1. Dùng OriginPatterns thay vì Origins để tránh lỗi mâu thuẫn với Credentials
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-                "http://localhost:5173" // Cổng mặc định của Vite/React
-        ));
+        // FIX: Cho phép tất cả các Origin để Mobile dễ dàng kết nối qua IP
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
 
-        // 2. Cho phép đầy đủ các Method
+        // Cho phép đầy đủ các phương thức HTTP
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
-        // 3. Cho phép các Header cần thiết cho JWT
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Cache-Control", "X-Requested-With"));
+        // FIX CHÍ MẠNG: Cho phép TẤT CẢ các Headers để tránh bị chặn 403 do thiếu Header custom
+        configuration.setAllowedHeaders(Arrays.asList("*"));
 
-        // 4. Cho phép gửi Credentials (Cookie, Auth Header)
         configuration.setAllowCredentials(true);
 
-        // 5. Expose header Authorization để Frontend có thể đọc Token
+        // Cho phép Client truy cập được vào Header Authorization (nếu cần lấy token từ Header)
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
