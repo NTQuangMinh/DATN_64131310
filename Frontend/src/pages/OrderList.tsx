@@ -9,7 +9,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import debounce from 'lodash.debounce';
 
-// --- Cấu hình Leaflet Icon (Sửa lỗi không hiển thị Marker) ---
+// --- Cấu hình Leaflet Icon ---
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
@@ -21,7 +21,6 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Component hỗ trợ di chuyển tâm bản đồ
 const RecenterMap = ({ lat, lng }: { lat: number; lng: number }) => {
   const map = useMap();
   useEffect(() => {
@@ -34,8 +33,10 @@ const OrderList = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeOrder, setActiveOrder] = useState<any>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false); // Trạng thái đợi tải PDF
   
-  // State cho Autocomplete
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -44,7 +45,7 @@ const OrderList = () => {
     customerName: '',
     customerPhone: '',
     deliveryAddress: '',
-    latitude: 16.0471, // Mặc định Đà Nẵng
+    latitude: 16.0471,
     longitude: 108.2068
   });
 
@@ -63,7 +64,6 @@ const OrderList = () => {
     fetchOrders();
   }, []);
 
-  // 1. Hàm tìm kiếm gợi ý địa chỉ (Nominatim API)
   const fetchSuggestions = useCallback(
     debounce(async (query: string) => {
       if (query.length < 3) {
@@ -87,7 +87,6 @@ const OrderList = () => {
     []
   );
 
-  // 2. Khi chọn một địa chỉ gợi ý
   const handleSelectSuggestion = (item: any) => {
     setFormData({
       ...formData,
@@ -99,7 +98,6 @@ const OrderList = () => {
     setShowSuggestions(false);
   };
 
-  // 3. Cho phép click bản đồ để chọn tọa độ thủ công
   const LocationPicker = () => {
     useMapEvents({
       click(e) {
@@ -116,7 +114,6 @@ const OrderList = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Backend sẽ tự sinh mã ORD-xxx tăng dần
       await axiosInstance.post('/orders', formData);
       alert("Tạo đơn hàng thành công!");
       setIsModalOpen(false);
@@ -127,8 +124,36 @@ const OrderList = () => {
     }
   };
 
+  const handleOpenDetail = (order: any) => {
+    setActiveOrder(order);
+    setIsDetailModalOpen(true);
+  };
+
+  // SỬA FIX LỖI XEM PDF: Gọi API đính kèm Token bảo mật, nhận định dạng file nhị phân (Blob)
+  const handleViewPdf = async (orderId: string) => {
+    setPdfLoading(true);
+    try {
+      const response = await axiosInstance.get(`/orders/${orderId}/receipt`, {
+        responseType: 'blob' // Bắt buộc cấu hình nhận file dạng nhị phân
+      });
+      
+      // Đóng gói dữ liệu nhị phân thành một đường dẫn ảo tạm thời trên trình duyệt
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const fileURL = URL.createObjectURL(blob);
+      
+      // Mở file PDF trên một Tab mới an toàn
+      window.open(fileURL, '_blank');
+    } catch (error) {
+      console.error("Lỗi tải PDF:", error);
+      alert("Không thể mở tài liệu PDF. Đơn hàng có thể chưa hoàn thành hoặc chưa được ký số!");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const getStatusStyle = (status: string) => {
     switch (status) {
+      case 'DELIVERED': return 'bg-green-100 text-green-700 border-green-200';
       case 'SUCCESS': return 'bg-green-100 text-green-700 border-green-200';
       case 'PENDING': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
       case 'ASSIGNED': return 'bg-blue-100 text-blue-700 border-blue-200';
@@ -153,7 +178,7 @@ const OrderList = () => {
         </button>
       </div>
 
-      {/* Danh sách đơn hàng */}
+      {/* Bảng danh sách */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -187,7 +212,12 @@ const OrderList = () => {
                   </span>
                 </td>
                 <td className="p-4 text-right">
-                  <button className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg"><Eye size={18} /></button>
+                  <button 
+                    onClick={() => handleOpenDetail(order)} 
+                    className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition"
+                  >
+                    <Eye size={18} />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -195,22 +225,19 @@ const OrderList = () => {
         </table>
       </div>
 
-      {/* MODAL NỔI (OVERLAY) TÍCH HỢP BẢN ĐỒ */}
+      {/* MODAL TẠO MỚI ĐƠN HÀNG */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden h-[85vh]">
-            
-            {/* Cột trái: Form nhập liệu */}
             <div className="w-full md:w-2/5 p-8 space-y-5 overflow-y-auto border-r">
               <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Tiếp nhận đơn mới</h2>
-
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-400 uppercase">Tên khách hàng</label>
                     <input required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" 
                       value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})}/>
-                </div>
+                  </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-400 uppercase">Điện thoại</label>
                     <input required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" 
@@ -232,7 +259,6 @@ const OrderList = () => {
                       fetchSuggestions(e.target.value);
                     }}
                   />
-                  {/* Gợi ý Autocomplete */}
                   {showSuggestions && suggestions.length > 0 && (
                     <div className="absolute z-[2100] w-full bg-white border border-slate-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                       {suggestions.map((item, index) => (
@@ -262,7 +288,6 @@ const OrderList = () => {
               </div>
             </div>
 
-            {/* Cột phải: Bản đồ */}
             <div className="hidden md:block w-3/5 bg-slate-100 relative">
               <MapContainer center={[formData.latitude, formData.longitude]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -270,6 +295,100 @@ const OrderList = () => {
                 <RecenterMap lat={formData.latitude} lng={formData.longitude} />
               </MapContainer>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XEM CHI TIẾT ĐƠN HÀNG VÀ CHỨNG TỪ PDF */}
+      {isDetailModalOpen && activeOrder && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-6 relative overflow-y-auto max-h-[85vh] space-y-6">
+            
+            <button
+              onClick={() => setIsDetailModalOpen(false)}
+              className="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition"
+            >
+              <X size={20} />
+            </button>
+
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Chi tiết đơn hàng {activeOrder.orderCode}</h2>
+              <p className="text-slate-400 text-[10px] font-mono mt-0.5">Mã định danh hệ thống (UUID): {activeOrder.id}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm border-b pb-4">
+              <div>
+                <span className="text-xs text-slate-400 font-bold uppercase block">Khách hàng</span>
+                <span className="font-bold text-slate-700">{activeOrder.customerName}</span>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400 font-bold uppercase block">Số điện thoại</span>
+                <span className="text-slate-600 font-medium">{activeOrder.customerPhone}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-xs text-slate-400 font-bold uppercase block">Địa chỉ giao hàng</span>
+                <span className="text-slate-600 text-xs">{activeOrder.deliveryAddress}</span>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400 font-bold uppercase block mb-1">Trạng thái đơn</span>
+                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(activeOrder.status)}`}>
+                  {activeOrder.status}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400 font-bold uppercase block">Vị trí GPS tọa độ</span>
+                <span className="text-blue-500 font-mono text-xs block mt-1">
+                  {activeOrder.latitude?.toFixed(6)}, {activeOrder.longitude?.toFixed(6)}
+                </span>
+              </div>
+            </div>
+
+            {/* Khối hiển thị ảnh minh chứng */}
+            <div className="space-y-2">
+              <span className="text-xs text-slate-400 font-bold uppercase block">Ảnh minh chứng (Tài xế chụp tại điểm giao)</span>
+              
+              {/* SỬA FIX LỖI XEM ẢNH: Kiểm tra chuỗi hợp lệ, tự động nạp tiền tố data:image nếu thiếu */}
+              {activeOrder.evidenceImage && activeOrder.evidenceImage.startsWith('data:image') ? (
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 flex justify-center items-center p-2 shadow-inner">
+                  <img
+                    src={activeOrder.evidenceImage}
+                    alt="Ảnh bằng chứng giao hàng thành công"
+                    className="max-h-60 rounded-xl object-contain"
+                  />
+                </div>
+              ) : activeOrder.evidenceImage && activeOrder.evidenceImage.length > 100 ? (
+                // Nếu DB trả về chuỗi mã hóa Base64 thô không có tiền tố header
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 flex justify-center items-center p-2 shadow-inner">
+                  <img
+                    src={`data:image/jpeg;base64,${activeOrder.evidenceImage}`}
+                    alt="Ảnh bằng chứng giao hàng thành công"
+                    className="max-h-60 rounded-xl object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-slate-400 text-xs italic">
+                  Chưa có hình ảnh bằng chứng (Đơn hàng chưa hoàn thành hoặc sai định dạng ảnh).
+                </div>
+              )}
+            </div>
+
+            {/* Nút xem trực tiếp file PDF có xác thực Token thông qua hàm xử lý */}
+            {activeOrder.status === 'DELIVERED' && (
+              <div className="pt-2">
+                <button
+                  onClick={() => handleViewPdf(activeOrder.id)}
+                  disabled={pdfLoading}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition shadow-lg text-center text-sm"
+                >
+                  {pdfLoading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Eye size={18} />
+                  )}
+                  Xem Biên Bản Ký Số Điện Tử (PDF)
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

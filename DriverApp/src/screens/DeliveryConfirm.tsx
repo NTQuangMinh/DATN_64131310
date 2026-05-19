@@ -1,161 +1,191 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, Image, 
-  Alert, ScrollView, ActivityIndicator, Dimensions 
-} from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, Modal, TextInput, Dimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 
-const { width } = Dimensions.get('window');
+// Lấy kích thước màn hình thiết bị
+const { width, height } = Dimensions.get('window');
 
-// --- 1. DI CHUYỂN STYLES LÊN TRÊN ĐỂ TRÁNH LỖI HOISTING ---
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f2f7', padding: 15 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { fontSize: 20, fontWeight: 'bold', marginTop: 50, marginBottom: 20, textAlign: 'center' },
-  section: { backgroundColor: '#fff', borderRadius: 15, padding: 15, marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
-  cameraBox: { height: 400, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', justifyContent: 'flex-end', alignItems: 'center' },
-  camera: { ...StyleSheet.absoluteFillObject },
-  captureBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  captureBtnInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff' },
-  previewImage: { width: '100%', height: 400, borderRadius: 12 },
-  reTakeBtn: { marginTop: 12, alignSelf: 'center' },
-  infoBox: { padding: 15, backgroundColor: '#e8f2ff', borderRadius: 10, marginBottom: 20 },
-  infoText: { color: '#007AFF', fontSize: 14, lineHeight: 20 },
-  submitBtn: { backgroundColor: '#34C759', padding: 18, borderRadius: 15, alignItems: 'center' },
-  submitText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  cancelBtn: { marginTop: 20, alignSelf: 'center', paddingBottom: 40 },
-  btn: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10 },
-  btnText: { color: '#fff', fontWeight: 'bold' },
-  warningText: { textAlign: 'center', marginBottom: 20 }
-});
+export default function DeliveryConfirm() {
+  const route = useRoute();
+  const navigation = useNavigation();
+  const { orderId } = (route.params as any) || {};
 
-const DeliveryConfirm = ({ route, navigation }: any) => {
-  // Lấy orderId từ params an toàn
-  const orderId = route.params?.orderId || '';
-  
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [isFailModalOpen, setIsFailModalOpen] = useState(false);
+  const [failReason, setFailReason] = useState('');
+  
   const cameraRef = useRef<any>(null);
 
-  useEffect(() => {
-    if (!permission?.granted) {
-      requestPermission();
-    }
-  }, [permission]);
-
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ 
-          base64: true, 
-          quality: 0.5 
-        });
-        setCapturedImage(photo.uri);
-      } catch (e) {
-        Alert.alert("Lỗi", "Không thể chụp ảnh. Vui lòng thử lại.");
-      }
-    }
-  };
-
-  const handleStartDigitalSignature = async () => {
-    if (!capturedImage) {
-        Alert.alert("Thông báo", "Vui lòng chụp ảnh minh chứng trước khi ký xác nhận.");
-        return;
-    }
-
-    setLoading(true);
-
-    // Chống lỗi nếu orderId là object
-    const idToSend = typeof orderId === 'object' ? orderId.id : orderId;
-
-    try {
-        // Lưu ảnh minh chứng
-        await AsyncStorage.setItem(`evidence_${idToSend}`, capturedImage);
-
-        // GỌI API LẤY LINK KÝ (Đã bỏ /api vì trong axiosInstance của bạn đã có sẵn)
-        const response = await axiosInstance.post(`/orders/${idToSend}/signing-url`);
-        
-        console.log("✅ DocuSign URL:", response.data.signingUrl);
-
-        if (response.data && response.data.signingUrl) {
-            navigation.navigate('DocuSignWebView', { 
-                signingUrl: response.data.signingUrl,
-                orderId: idToSend 
-            });
-        }
-    } catch (error: any) {
-        console.error("❌ Error:", error.response?.data || error.message);
-        Alert.alert("Lỗi", "Không thể lấy link ký. Vui lòng kiểm tra kết nối Server.");
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  if (!permission) return <View style={styles.center}><ActivityIndicator size="large" /></View>;
-  
+  if (!permission) return <View />;
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.warningText}>Cần quyền Camera để minh chứng giao hàng.</Text>
-        <TouchableOpacity onPress={requestPermission} style={styles.btn}>
-          <Text style={styles.btnText}>Cấp quyền ngay</Text>
+      <View style={styles.permissionContainer}>
+        <Text style={{ textAlign: 'center', marginBottom: 10 }}>Ứng dụng cần quyền truy cập Camera để chụp ảnh minh chứng</Text>
+        <TouchableOpacity style={styles.btn} onPress={requestPermission}>
+          <Text style={styles.btnText}>Cấp quyền Camera</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.4 });
+        const base64Data = `data:image/jpeg;base64,${photo.base64}`;
+        setCapturedImage(base64Data);
+        await AsyncStorage.setItem(`evidence_${orderId}`, base64Data);
+      } catch (e) {
+        Alert.alert("Lỗi", "Không thể chụp hình ảnh lúc này.");
+      }
+    }
+  };
+
+  const handleProceedToSigning = async () => {
+    if (!capturedImage) {
+      Alert.alert("Thông báo", "Vui lòng chụp ảnh minh chứng gói hàng trước khi ký nhận.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await axiosInstance.post(`/orders/${orderId}/signing-url`);
+      
+      // Đồng bộ sử dụng (navigation as any) để đưa sang màn hình ký số DocuSign
+      (navigation as any).navigate('DocuSignWebView', {
+        signingUrl: response.data.signingUrl,
+        orderId: orderId
+      });
+    } catch (error) {
+      Alert.alert("Lỗi", "Không thể kết nối dịch vụ ký số DocuSign.");
+    } finally { // FIX: Sửa thành finally chuẩn cú pháp hệ thống
+      setLoading(false);
+    }
+  };
+
+  const handleReportFailure = async () => {
+    if (!failReason.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập rõ lý do giao hàng thất bại.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await axiosInstance.post(`/orders/${orderId}/complete`, {
+        orderId: orderId,
+        status: "CANCELED",
+        failureReason: failReason,
+        signatureValue: "FAILED_REPORTED",
+        actualLatitude: 0,
+        actualLongitude: 0,
+        evidenceImage: capturedImage || ""
+      });
+      
+      Alert.alert("Thành công", "Đã cập nhật báo cáo giao hàng thất bại lên hệ thống.");
+      setIsFailModalOpen(false);
+      (navigation as any).navigate('OrderList');
+    } catch (error) {
+      Alert.alert("Lỗi", "Không thể gửi báo cáo thất bại.");
+    } finally { // FIX: Sửa thành finally chuẩn cú pháp hệ thống
+      setLoading(false);
+    }
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Fix lỗi substring an toàn */}
-      <Text style={styles.header}>
-        Xác nhận đơn #{orderId ? orderId.toString().substring(0, 8) : '...'}
-      </Text>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>1. Ảnh minh chứng giao hàng 📸</Text>
-        {capturedImage ? (
-          <View>
-            <Image source={{ uri: capturedImage }} style={styles.previewImage} />
-            <TouchableOpacity onPress={() => setCapturedImage(null)} style={styles.reTakeBtn}>
-              <Text style={{ color: '#FF3B30', fontWeight: 'bold' }}>Chụp lại ảnh khác</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.cameraBox}>
-            <CameraView style={styles.camera} ref={cameraRef} />
+    <View style={styles.container}>
+      {capturedImage ? (
+        <View style={styles.previewContainer}>
+          <Image source={{ uri: capturedImage }} style={styles.preview} />
+          <TouchableOpacity style={[styles.btn, {backgroundColor: '#666', marginTop: 15}]} onPress={() => setCapturedImage(null)}>
+            <Text style={styles.btnText}>Chụp lại ảnh khác</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <CameraView style={styles.camera} ref={cameraRef}>
+          <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
-              <View style={styles.captureBtnInner} />
+              <View style={styles.innerCaptureBtn} />
             </TouchableOpacity>
           </View>
-        )}
+        </CameraView>
+      )}
+
+      <View style={styles.footer}>
+        <TouchableOpacity 
+          style={[styles.actionBtn, { backgroundColor: '#34C759' }]} 
+          onPress={handleProceedToSigning}
+          disabled={loading}
+        >
+          <Text style={styles.btnText}>{loading ? "Đang tải..." : "Tiến hành ký nhận số"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.actionBtn, { backgroundColor: '#FF3B30', marginTop: 10 }]} 
+          onPress={() => setIsFailModalOpen(true)}
+        >
+          <Text style={styles.btnText}>Báo giao thất bại</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoText}>ℹ️ Hệ thống sẽ mở trình duyệt ký số DocuSign để bạn ký xác nhận giao hàng.</Text>
-      </View>
+      <Modal visible={isFailModalOpen} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Lý do giao thất bại</Text>
+            
+            <View style={styles.shortcutContainer}>
+              {["Khách không nhấc máy", "Khách hẹn ngày khác", "Sai địa chỉ / SĐT"].map((reason) => (
+                <TouchableOpacity key={reason} style={styles.shortcutBadge} onPress={() => setFailReason(reason)}>
+                  <Text style={{ fontSize: 12, color: '#007AFF' }}>{reason}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-      <TouchableOpacity 
-        style={[styles.submitBtn, (!capturedImage || loading) && { backgroundColor: '#ccc' }]} 
-        onPress={handleStartDigitalSignature}
-        disabled={loading || !capturedImage}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitText}>TIẾN HÀNH KÝ SỐ PKI</Text>
-        )}
-      </TouchableOpacity>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Nhập chi tiết lý do cụ thể tại đây..."
+              multiline={true}
+              numberOfLines={3}
+              value={failReason}
+              onChangeText={setFailReason}
+            />
 
-      <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
-        <Text style={{ color: '#8e8e93' }}>Quay lại</Text>
-      </TouchableOpacity>
-    </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#999' }]} onPress={() => setIsFailModalOpen(false)}>
+                <Text style={styles.btnText}>Hủy bỏ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#FF3B30' }]} onPress={handleReportFailure}>
+                <Text style={styles.btnText}>Xác nhận hủy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
-};
+}
 
-export default DeliveryConfirm;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  permissionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#fff' },
+  camera: { flex: 1, justifyContent: 'flex-end' },
+  buttonContainer: { flexDirection: 'row', backgroundColor: 'transparent', justifyContent: 'center', marginBottom: 30 },
+  captureBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.4)', justifyContent: 'center', alignItems: 'center' },
+  innerCaptureBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff' },
+  previewContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
+  preview: { width: width * 0.85, height: height * 0.5, borderRadius: 16, resizeMode: 'cover' },
+  footer: { backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  actionBtn: { width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  btn: { backgroundColor: '#007AFF', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
+  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#fff', padding: 20, borderRadius: 20, alignItems: 'center' },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  textInput: { width: '100%', borderColor: '#ccc', borderWidth: 1, borderRadius: 10, padding: 10, fontSize: 13, height: 70, textAlignVertical: 'top' },
+  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  shortcutContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12, justifyContent: 'center' },
+  shortcutBadge: { backgroundColor: '#E1F0FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 15 }
+});

@@ -16,7 +16,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     // 2. Lấy danh sách nhiệm vụ cho tài xế dựa trên ID và trạng thái
     // Thường dùng trạng thái 'ASSIGNED' để tài xế biết mình cần giao đơn nào
-    List<Order> findByDriverIdAndStatus(UUID driverId, String status);
+    // Sửa hàm cũ từ tìm 1 trạng thái thành tìm danh sách trạng thái thuộc ASSIGNED hoặc DELIVERING
+    List<Order> findByDriverIdAndStatusIn(UUID driverId, List<String> statuses);
 
     // 3. Lấy tất cả đơn hàng thuộc về một tuyến đường cụ thể (Tuần 5)
     List<Order> findByRouteId(UUID routeId);

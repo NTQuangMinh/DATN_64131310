@@ -53,6 +53,7 @@ public class SecurityConfig {
 
                                 .requestMatchers("/api/orders/*/signing-url").hasAnyRole("ADMIN", "DRIVER")
                                 .requestMatchers("/api/orders/*/complete").hasAnyRole("ADMIN", "DRIVER")
+                                .requestMatchers("/api/orders/*/receipt").hasAnyRole("ADMIN")
                                 .requestMatchers("/api/orders/*/report").hasAnyRole("ADMIN", "DRIVER")
 
                                 .requestMatchers("/api/orders/**").hasRole("ADMIN")

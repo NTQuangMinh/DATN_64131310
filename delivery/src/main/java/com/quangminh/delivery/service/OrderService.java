@@ -43,6 +43,18 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
+    public Order updateOrderStatus(UUID id, String status) {
+        // 1. Tìm đơn hàng xem có tồn tại trong DB không
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng với ID: " + id));
+
+        // 2. Thay đổi trạng thái (Ví dụ: Chuyển sang DELIVERING)
+        order.setStatus(status);
+
+        // 3. Lưu lại xuống Database (Hàm .save này mặc định JpaRepository đã có sẵn)
+        return orderRepository.save(order);
+    }
+
     public List<Order> getAllOrders() {
         return orderRepository.findAll();
     }
@@ -122,7 +134,7 @@ public class OrderService {
     }
 
     public List<Order> getOrdersByDriverId(UUID driverId) { // Lỗi 2: Cannot resolve method 'getOrdersByDriverId'
-        return orderRepository.findByDriverIdAndStatus(driverId, "ASSIGNED");
+        return orderRepository.findByDriverIdAndStatusIn(driverId, List.of("ASSIGNED", "DELIVERING"));
     }
 
     @Transactional
