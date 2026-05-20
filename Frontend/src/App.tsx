@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import OrderList from './pages/OrderList';
 import Sidebar from './components/Sidebar';
 import DriverTasks from './pages/DriverTasks';
+import Verifypage from './pages/VerifyPage'; // Đảm bảo đường dẫn import đúng
 
 // Component bảo vệ Route: Nếu chưa có Token thì đá về trang Login
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
@@ -16,10 +17,17 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Trang đăng nhập không cần bảo vệ */}
+        {/* ========================================================= */}
+        {/* KHU VỰC PUBLIC: KHÔNG CẦN ĐĂNG NHẬP AI CŨNG VÀO ĐƯỢC      */}
+        {/* ========================================================= */}
         <Route path="/login" element={<Login />} />
+        
+        {/* TRANG KIỂM CHỨNG CÔNG KHAI DÀNH CHO KHÁCH HÀNG */}
+        <Route path="/verify" element={<Verifypage />} />
 
-        {/* Các trang yêu cầu phải đăng nhập mới được xem */}
+        {/* ========================================================= */}
+        {/* KHU VỰC PRIVATE: BẮT BUỘC ĐĂNG NHẬP (ADMIN)               */}
+        {/* ========================================================= */}
         <Route
           path="/*"
           element={

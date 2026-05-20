@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../api/axiosInstance';
 import { 
   Truck, MapPin, CheckCircle, Navigation, 
-  Loader2, Package, X, LocateFixed, Camera, ChevronRight 
+  Loader2, Package, X, Camera, 
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';

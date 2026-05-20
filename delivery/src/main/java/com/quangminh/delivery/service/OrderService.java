@@ -158,4 +158,9 @@ public class OrderService {
 
         return stats;
     }
+    public Order findByOrderCode(String orderCode) {
+        // Gọi xuống Repository xử lý, nếu tìm thấy thì trả về đối tượng Order,
+        // nếu không tìm thấy (.orElse(null)) thì trả về null để Controller tự báo lỗi công khai
+        return orderRepository.findByOrderCode(orderCode);
+    }
 }

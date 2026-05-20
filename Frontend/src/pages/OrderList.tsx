@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import axiosInstance from '../api/axiosInstance';
 import { 
-  Package, Search, Filter, Eye, MapPin, X, 
-  User, Phone, Navigation, Save, Globe, Loader2 
+  Package, Eye, MapPin, X, Save, Loader2 
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';

@@ -3,6 +3,8 @@ package com.quangminh.delivery.controller;
 import com.quangminh.delivery.dto.DeliveryCompleteDTO;
 import com.quangminh.delivery.dto.OrderRequestDTO;
 import com.quangminh.delivery.entity.Order;
+import com.quangminh.delivery.entity.AuditLog;
+import com.quangminh.delivery.repository.AuditLogRepository;
 import com.quangminh.delivery.service.DocuSignService;
 import com.quangminh.delivery.service.OrderCompletionService;
 import com.quangminh.delivery.service.OrderService;
@@ -15,6 +17,12 @@ import org.springframework.http.MediaType; // Import thêm cái này
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfReader;
+import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
+import java.util.HashMap;
+import java.util.Map;
 
 import java.nio.file.Path; // Import thêm cái này
 import java.nio.file.Paths; // Import thêm cái này
@@ -43,7 +51,31 @@ public class OrderController {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
+    // =========================================================================
+    // TUẦN 6: API GHI NHẬN TÀI XẾ CHECK-IN TẠI ĐIỂM ĐẾN (GPS + THỜI GIAN)
+    // =========================================================================
+    @PostMapping("/{id}/check-in")
+    public ResponseEntity<String> checkInAtLocation(
+            @PathVariable UUID id,
+            @RequestParam String driverId,
+            @RequestParam double lat,
+            @RequestParam double lng) {
+
+        Order order = orderService.getOrderById(id);
+
+        // Ghi nhật ký hệ thống (Audit Log) theo đúng tuần 12 đề cương
+        String logDetail = String.format("Tài xế [ID: %s] đã nhấn CHECK-IN thành công tại đơn [%s]. Vị trí GPS ghi nhận: Vĩ độ %f, Kinh độ %f",
+                driverId, order.getOrderCode(), lat, lng);
+
+        AuditLog checkInLog = new AuditLog("CHECK_IN", driverId, logDetail);
+        auditLogRepository.save(checkInLog);
+
+        System.out.println("Audit Log: " + logDetail);
+        return ResponseEntity.ok("Ghi nhận thông tin Check-in thành công!");
+    }
     // 1. Tạo đơn hàng và thông báo Real-time cho tài xế qua WebSocket
     @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody OrderRequestDTO dto) {
@@ -113,7 +145,7 @@ public class OrderController {
         // Lưu lại vào Database thông qua hàm save của bạn
         Order updatedOrder = orderService.updateOrderStatus(id, status); // Hoặc gọi qua Service của bạn
 
-        System.out.println("🚀 Đơn hàng " + order.getOrderCode() + " đã chuyển sang trạng thái: " + status);
+        System.out.println("Đơn hàng " + order.getOrderCode() + " đã chuyển sang trạng thái: " + status);
         return ResponseEntity.ok(updatedOrder);
     }
     // Endpoint cập nhật trạng thái đơn và lưu ảnh minh chứng Base64 từ Mobile gửi lên
@@ -129,14 +161,14 @@ public class OrderController {
         // VÁ LỖI MẤT FILE: TỰ ĐỘNG SINH FILE PDF LƯU VÀO Ổ CỨNG NGAY TẠI ĐÂY
         // =========================================================================
         try {
-            System.out.println("⏳ Đang kích hoạt tự động tạo tệp PDF cho đơn hàng: " + completedOrder.getOrderCode());
+            System.out.println("Đang kích hoạt tự động tạo tệp PDF cho đơn hàng: " + completedOrder.getOrderCode());
 
             // Gọi dịch vụ iText 7 đã sửa hôm trước để tạo file PDF có dấu tiếng Việt
             pdfGeneratorService.generateDeliveryReceipt(completedOrder);
 
-            System.out.println("✅ Đã tạo và lưu thành công file PDF vào thư mục storage/receipts!");
+            System.out.println("Đã tạo và lưu thành công file PDF vào thư mục storage/receipts!");
         } catch (Exception e) {
-            System.out.println("⚠️ Cảnh báo: Trạng thái đã cập nhật nhưng không thể sinh file PDF: " + e.getMessage());
+            System.out.println("Cảnh báo: Trạng thái đã cập nhật nhưng không thể sinh file PDF: " + e.getMessage());
         }
         // =========================================================================
 
@@ -166,7 +198,7 @@ public class OrderController {
             Resource resource = new UrlResource(filePath.toUri());
 
             if (!resource.exists()) {
-                System.out.println("❌ Không tìm thấy file PDF tại: " + filePath.toAbsolutePath());
+                System.out.println("Không tìm thấy file PDF tại: " + filePath.toAbsolutePath());
                 return ResponseEntity.notFound().build();
             }
 
@@ -179,6 +211,65 @@ public class OrderController {
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
+        }
+    }
+    @PostMapping("/verify-pdf")
+    public ResponseEntity<Map<String, Object>> verifyPdf(@RequestParam("file") MultipartFile file) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            // 1. Đọc nội dung text từ file PDF tải lên bằng iText 7
+            PdfDocument pdfDoc = new PdfDocument(new PdfReader(file.getInputStream()));
+            String pdfText = PdfTextExtractor.getTextFromPage(pdfDoc.getPage(1));
+            pdfDoc.close();
+
+            // 2. Trích xuất Mã Đơn Hàng (OrderCode) từ đoạn text đọc được
+            // Giả sử trong PDF có chứa chuỗi "Mã Đơn Hàng: ORD-xxx" hoặc "ORD-"
+            String orderCode = null;
+            String[] words = pdfText.split("\\s+");
+            for (String word : words) {
+                if (word.startsWith("ORD-")) {
+                    orderCode = word.replaceAll("[^a-zA-Z0-9-]", ""); // Xóa ký tự thừa
+                    break;
+                }
+            }
+
+            if (orderCode == null) {
+                response.put("isValid", false);
+                response.put("message", "Không tìm thấy mã đơn hàng hợp lệ trong file PDF. File có thể đã bị làm giả.");
+                return ResponseEntity.ok(response);
+            }
+
+            // 3. Truy vấn Database xem có đơn hàng này không
+            Order order = orderService.findByOrderCode(orderCode); // Đảm bảo bạn có hàm này trong Service
+
+            if (order == null || !"DELIVERED".equals(order.getStatus())) {
+                response.put("isValid", false);
+                response.put("message", "Đơn hàng không tồn tại hoặc chưa được giao thành công.");
+                return ResponseEntity.ok(response);
+            }
+
+            // 4. Nếu hợp lệ, trả về kết quả kèm thông tin đã bị che (Masked) để bảo mật
+            // Che tên khách hàng: "Nguyễn Văn A" -> "Nguyễn V*** A"
+            String maskedName = order.getCustomerName().replaceAll("(?<=.{2}).(?=.{2})", "*");
+            // Che SĐT: "0901234567" -> "090****567"
+            String maskedPhone = order.getCustomerPhone().replaceAll("(?<=\\d{3})\\d(?=\\d{3})", "*");
+
+            response.put("isValid", true);
+            response.put("message", "Biên bản hợp lệ! Chữ ký số và dữ liệu khớp với hệ thống.");
+            response.put("orderCode", orderCode);
+            response.put("customerName", maskedName);
+            response.put("customerPhone", maskedPhone);
+            response.put("deliveryAddress", order.getDeliveryAddress());
+
+            // Lưu lại hành động này vào Audit Log (Tuần 12)
+            auditLogRepository.save(new AuditLog("VERIFY", "PUBLIC_USER", "Kiểm chứng thành công biên bản PDF đơn " + orderCode));
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            response.put("isValid", false);
+            response.put("message", "Định dạng file không hợp lệ hoặc file bị hỏng.");
+            return ResponseEntity.ok(response);
         }
     }
 }

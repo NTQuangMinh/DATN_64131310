@@ -17,6 +17,7 @@ const Sidebar = () => {
     { icon: <Package size={20}/>, label: 'Đơn hàng', path: '/orders' },
     { icon: <MapPin size={20}/>, label: 'Lập tuyến', path: '/routes' },
     { icon: <Truck size={20}/>, label: 'Nhiệm vụ giao hàng', path: '/drivertasks' },
+    // Sửa đường dẫn cho khớp với App.tsx
     { icon: <ShieldCheck size={20}/>, label: 'Xác minh ký số', path: '/verify' },
   ];
 
@@ -24,6 +25,17 @@ const Sidebar = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     navigate('/login');
+  };
+
+  // Hàm xử lý điều hướng thông minh
+  const handleNavigation = (path: string) => {
+    if (path === '/verify') {
+      // Nếu là trang Kiểm chứng công khai -> Mở ở Tab mới
+      window.open(path, '_blank');
+    } else {
+      // Các trang nội bộ Admin -> Chuyển trang bình thường
+      navigate(path);
+    }
   };
 
   return (
@@ -43,7 +55,8 @@ const Sidebar = () => {
           return (
             <button
               key={item.label}
-              onClick={() => navigate(item.path)}
+              // Gọi hàm handleNavigation thay vì navigate trực tiếp
+              onClick={() => handleNavigation(item.path)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
                 ${isActive 
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 

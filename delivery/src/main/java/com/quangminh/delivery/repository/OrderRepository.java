@@ -12,7 +12,7 @@ import java.util.UUID;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     // 1. Tìm đơn hàng theo mã code (Ví dụ: ORD-001)
-    Optional<Order> findByOrderCode(String orderCode);
+    Order findByOrderCode(String orderCode);
 
     // 2. Lấy danh sách nhiệm vụ cho tài xế dựa trên ID và trạng thái
     // Thường dùng trạng thái 'ASSIGNED' để tài xế biết mình cần giao đơn nào
@@ -21,6 +21,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     // 3. Lấy tất cả đơn hàng thuộc về một tuyến đường cụ thể (Tuần 5)
     List<Order> findByRouteId(UUID routeId);
+
 
     // 4. Tìm các đơn hàng đã hoàn thành để phục vụ đối soát và Verify (Tuần 10)
     List<Order> findByStatus(String status);
