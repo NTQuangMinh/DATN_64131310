@@ -98,16 +98,24 @@ public class DocuSignService {
 
         Map<String, String> doc = new HashMap<>();
         doc.put("documentBase64", pdfBase64);
-        doc.put("name", "Bien-ban-giao-hang.pdf");
+        doc.put("name", "Bien-ban-giao-hang-" + order.getOrderCode() + ".pdf");
         doc.put("fileExtension", "pdf");
         doc.put("documentId", "1");
         body.put("documents", Collections.singletonList(doc));
 
         Map<String, Object> signer = new HashMap<>();
-        signer.put("email", order.getDriver().getEmail());
-        signer.put("name", order.getDriver().getFullName());
+
+        // ========================================================
+        // SỬA TẠI ĐÂY: Chuyển thông tin người ký thành Khách Hàng
+        // Tạo một email ảo duy nhất dựa trên mã đơn hàng để DocuSign không bị nhầm lẫn
+        // ========================================================
+        signer.put("email", "khach_" + order.getOrderCode() + "@delivery.local");
+        signer.put("name", order.getCustomerName()); // Lấy tên Khách hàng
         signer.put("recipientId", "1");
-        signer.put("clientUserId", order.getDriver().getId().toString());
+
+        // Cực kỳ quan trọng: Lấy ID đơn hàng làm định danh phiên ký
+        signer.put("clientUserId", order.getId().toString());
+        // ========================================================
 
         Map<String, Object> signHere = new HashMap<>();
         signHere.put("documentId", "1");
@@ -134,9 +142,15 @@ public class DocuSignService {
         String url = BASE_API + "/accounts/" + accountId + "/envelopes/" + envelopeId + "/views/recipient";
         Map<String, String> body = new HashMap<>();
         body.put("authenticationMethod", "none");
-        body.put("email", order.getDriver().getEmail());
-        body.put("userName", order.getDriver().getFullName());
-        body.put("clientUserId", order.getDriver().getId().toString());
+
+        // ========================================================
+        // SỬA TẠI ĐÂY: Thông tin này PHẢI KHỚP TUYỆT ĐỐI với thông tin ở createEnvelope
+        // ========================================================
+        body.put("email", "khach_" + order.getOrderCode() + "@delivery.local");
+        body.put("userName", order.getCustomerName());
+        body.put("clientUserId", order.getId().toString());
+        // ========================================================
+
         body.put("returnUrl", "http://success.delivery.app/finish");
 
         HttpHeaders headers = new HttpHeaders();

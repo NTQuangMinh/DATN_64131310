@@ -1,7 +1,9 @@
 package com.quangminh.delivery.service;
 
+// Các thư viện cho giao diện PDF và Font
 import com.itextpdf.io.font.PdfEncodings;
 import com.itextpdf.kernel.colors.DeviceRgb;
+import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.font.PdfFont;
 import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.kernel.pdf.PdfDocument;
@@ -11,8 +13,14 @@ import com.itextpdf.layout.element.Cell;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
+
+// Các thư viện TẠO MÃ QR (Đã được thêm vào)
+import com.itextpdf.barcodes.BarcodeQRCode;
+import com.itextpdf.kernel.pdf.xobject.PdfFormXObject;
+import com.itextpdf.layout.element.Image;
+
 import com.quangminh.delivery.entity.Order;
-import org.springframework.core.io.ClassPathResource; // Import thêm thư viện này
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -29,12 +37,10 @@ public class PdfGeneratorService {
 
         try {
             PdfWriter writer = new PdfWriter(dest);
-            PdfDocument pdf = new PdfDocument(writer);
+            PdfDocument pdf = new PdfDocument(writer); // Biến gốc tên là "pdf"
             Document document = new Document(pdf);
 
-            // =================================================================
-            // SỬA TẠI ĐÂY: Nạp Font bằng ClassPathResource (An toàn tuyệt đối)
-            // =================================================================
+            // Nạp Font bằng ClassPathResource
             ClassPathResource fontResource = new ClassPathResource("fonts/Arial.ttf");
             byte[] fontBytes;
             try (InputStream is = fontResource.getInputStream()) {
@@ -43,7 +49,7 @@ public class PdfGeneratorService {
             PdfFont vietnameseFont = PdfFontFactory.createFont(fontBytes, PdfEncodings.IDENTITY_H);
             document.setFont(vietnameseFont);
 
-            // Định nghĩa bảng màu (Theme Xanh Dương Công Nghệ)
+            // Định nghĩa bảng màu
             DeviceRgb primaryColor = new DeviceRgb(0, 122, 255);
             DeviceRgb headerTextColor = new DeviceRgb(255, 255, 255);
             DeviceRgb labelBgColor = new DeviceRgb(245, 245, 247);
@@ -79,8 +85,27 @@ public class PdfGeneratorService {
 
             document.add(table);
 
+            // =================================================================
+            // CHÈN MÃ QR CODE (Sử dụng biến "pdf" thay vì "pdfDoc")
+            // =================================================================
+            String verifyUrl = "http://localhost:5173/verify"; // Đổi thành tên miền sau khi Deploy
+            BarcodeQRCode qrCode = new BarcodeQRCode(verifyUrl);
+
+            // Ép QR Code thành dạng ảnh gắn vào biến "pdf"
+            PdfFormXObject qrCodeObject = qrCode.createFormXObject(ColorConstants.BLACK, pdf);
+            Image qrImage = new Image(qrCodeObject);
+            qrImage.setWidth(100);
+            qrImage.setHeight(100);
+
+            document.add(new Paragraph("Quét mã QR dưới đây để kiểm chứng biên bản trực tuyến:")
+                    .setMarginTop(20)
+                    .setFontSize(10)
+                    .setItalic());
+            document.add(qrImage);
+            // =================================================================
+
             // Footer chờ ký DocuSign
-            Paragraph footer = new Paragraph("\n\n\nChữ ký điện tử xác nhận của khách hàng\n(Ký số bảo mật an toàn qua hệ thống DocuSign PKI)")
+            Paragraph footer = new Paragraph("\nChữ ký điện tử xác nhận của khách hàng\n(Ký số bảo mật an toàn qua hệ thống DocuSign PKI)")
                     .setFontSize(10)
                     .setItalic()
                     .setFontColor(mutedGray)
@@ -88,9 +113,13 @@ public class PdfGeneratorService {
             document.add(footer);
 
             document.close();
+
+            System.out.println("Đã tạo PDF thành công (chạy ngầm): " + dest);
             return dest;
         } catch (Exception e) {
-            throw new RuntimeException("Lỗi khi sinh file PDF: " + e.getMessage(), e);
+            System.err.println("Lỗi khi sinh file PDF: " + e.getMessage());
+            e.printStackTrace();
+            return null;
         }
     }
 

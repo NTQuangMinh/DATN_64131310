@@ -114,29 +114,52 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
     });
   };
 
+  // Thêm một state mới ở trên cùng component (dưới các state cũ) để lưu thứ tự:
+  const [optimalSequence, setOptimalSequence] = useState<any[]>([]);
+
+  // Thay thế hàm cũ bằng hàm này:
   const calculateOptimizedRoute = async () => {
     if (!driverLocation || selectedOrders.length === 0) {
       setRouteCoords([]);
+      setOptimalSequence([]);
       return;
     }
+    
+    // Tọa độ đầu tiên luôn là tài xế (source=first)
     let coordinateString = `${driverLocation.longitude},${driverLocation.latitude}`;
     selectedOrders.forEach(order => {
       coordinateString += `;${order.longitude},${order.latitude}`;
     });
+    
     try {
       const url = `https://router.project-osrm.org/trip/v1/driving/${coordinateString}?overview=full&geometries=geojson&source=first&destination=any&roundtrip=false`;
       const resp = await fetch(url);
       const json = await resp.json();
+      
       if (json.trips && json.trips.length > 0) {
+        // 1. Vẽ đường đi (Polyline)
         const points = json.trips[0].geometry.coordinates.map((coord: any) => ({
           latitude: coord[1],
           longitude: coord[0],
         }));
         setRouteCoords(points);
         mapRef.current?.fitToCoordinates(points, {
-          edgePadding: { top: 70, right: 70, bottom: 70, left: 70 },
-          animated: true,
+          edgePadding: { top: 70, right: 70, bottom: 70, left: 70 }, animated: true,
         });
+
+        // 2. BÓC TÁCH THỨ TỰ GIAO HÀNG (Dựa theo waypoint_index của OSRM)
+        // json.waypoints chứa thứ tự di chuyển tối ưu do AI sắp xếp
+        if (json.waypoints && json.waypoints.length > 1) {
+          const orderWaypoints = json.waypoints.slice(1); // Bỏ điểm index 0 (Tài xế)
+          
+          const sortedOrders = [...selectedOrders].sort((a, b) => {
+            const indexA = orderWaypoints[selectedOrders.indexOf(a)].waypoint_index;
+            const indexB = orderWaypoints[selectedOrders.indexOf(b)].waypoint_index;
+            return indexA - indexB;
+          });
+          
+          setOptimalSequence(sortedOrders); // Lưu lại danh sách đã sắp xếp 1->2->3
+        }
       }
     } catch (error) {
       console.log("Lỗi tính toán lộ trình OSRM:", error);
@@ -238,11 +261,23 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
               const isSelected = selectedOrders.some(o => o.id === item.id);
               const isAssigned = item.status === 'ASSIGNED';
               
+              // TÌM THỨ TỰ CỦA ĐƠN NÀY TRONG TUYẾN ĐƯỜNG TỐI ƯU
+              const routeIndex = optimalSequence.findIndex(o => o.id === item.id);
+              const stepNumber = routeIndex !== -1 ? routeIndex + 1 : null;
+
               return (
-                /* SỬA LỖI 1: Đổi vỏ bọc ngoài cùng từ TouchableOpacity sang View để ngắt xung đột click */
                 <View style={[styles.card, isSelected && styles.selectedCard]}>
                   
-                  {/* Khu vực bấm 1: Chỉ bao bọc phần text thông tin chính để bật/tắt chọn gom đơn trên bản đồ */}
+                  {/* === HIỂN THỊ CHỈ DẪN TUYẾN ĐƯỜNG NẾU ĐƯỢC CHỌN === */}
+                  {isSelected && stepNumber !== null && (
+                    <View style={{ backgroundColor: '#E1F0FF', padding: 6, borderTopLeftRadius: 12, borderTopRightRadius: 12, marginHorizontal: -15, marginTop: -15, marginBottom: 10, borderBottomWidth: 1, borderColor: '#007AFF', alignItems: 'center' }}>
+                      <Text style={{ fontWeight: 'bold', color: '#007AFF', fontSize: 12 }}>
+                        📍 ĐIỂM GIAO SỐ {stepNumber} TRÊN TUYẾN
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* KHU VỰC THÔNG TIN (Click để chọn gom đơn) */}
                   <TouchableOpacity 
                     style={styles.clickableInfoArea} 
                     onPress={() => handleToggleSelectOrder(item)}
@@ -257,6 +292,7 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                       </Text>
                     </View>
                   </TouchableOpacity>
+                
 
                   {/* Khu vực 2: Hàng nút bấm chức năng tách biệt hoàn toàn nằm phía dưới */}
                   <View style={styles.quickActionsRow}>

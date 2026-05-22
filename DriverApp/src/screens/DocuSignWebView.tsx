@@ -64,13 +64,13 @@ export default function DocuSignWebView() {
     <View style={styles.container}>
       <WebView
         source={{ uri: signingUrl }}
+        cacheEnabled={false}       // Ngăn không cho lưu cache trang web
+        incognito={true}
         startInLoadingState={true}
         renderLoading={() => (
           <ActivityIndicator size="large" color="#007AFF" style={styles.loading} />
         )}
         onNavigationStateChange={handleNavigationStateChange}
-        
-        // Bắt lỗi mạng -1003 (khi DocuSign chuyển hướng về localhost/host ảo)
         onError={async (syntheticEvent) => {
           console.log("🚀 Phát hiện tài xế ký xong (Kích hoạt qua Event lỗi kết nối ảo)!");
           await changeStatusToDelivered();

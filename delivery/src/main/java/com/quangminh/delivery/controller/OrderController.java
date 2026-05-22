@@ -126,8 +126,29 @@ public class OrderController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Long>> getStats() {
-        return ResponseEntity.ok(orderService.getOrderStatistics());
+    public ResponseEntity<Map<String, Object>> getDashboardStats() {
+        // Lấy toàn bộ đơn hàng (Nếu data lớn thì nên dùng Query COUNT trong Repository cho tối ưu,
+        // nhưng với đồ án sinh viên thì list ra rồi đếm cũng hoàn toàn chấp nhận được)
+        List<Order> allOrders = orderService.getAllOrders();
+
+        long total = allOrders.size();
+        long delivered = allOrders.stream().filter(o -> "DELIVERED".equals(o.getStatus()) || "SUCCESS".equals(o.getStatus())).count();
+        long canceled = allOrders.stream().filter(o -> "CANCELED".equals(o.getStatus())).count();
+        long delivering = allOrders.stream().filter(o -> "DELIVERING".equals(o.getStatus())).count();
+        long assigned = allOrders.stream().filter(o -> "ASSIGNED".equals(o.getStatus())).count();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalOrders", total);
+        stats.put("deliveredOrders", delivered);
+        stats.put("canceledOrders", canceled);
+        stats.put("deliveringOrders", delivering);
+        stats.put("assignedOrders", assigned);
+
+        // Tính tỷ lệ thành công (tránh chia cho 0)
+        double successRate = total == 0 ? 0 : Math.round(((double) delivered / total) * 100.0 * 10.0) / 10.0;
+        stats.put("successRate", successRate);
+
+        return ResponseEntity.ok(stats);
     }
 
     // API dành riêng cho việc chuyển đổi trạng thái (Ví dụ: Từ ASSIGNED sang DELIVERING)
