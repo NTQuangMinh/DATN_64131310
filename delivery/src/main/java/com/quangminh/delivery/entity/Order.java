@@ -46,12 +46,7 @@ public class Order {
     @Column(name = "evidence_image", columnDefinition = "TEXT")
     private String evidenceImage; // Lưu link ảnh hoặc Base64 ảnh minh chứng
 
-    // --- Dữ liệu phục vụ Ký số (Digital Signature) ---
-    @Column(name = "hash_value", columnDefinition = "TEXT")
-    private String hashValue; // Mã SHA-256 của biên bản
-
-    @Column(name = "signature_value", columnDefinition = "TEXT")
-    private String signatureValue; // Chữ ký số sau khi ký bằng Private Key
+    private String failureReason;
 
     // --- Quản lý trạng thái & Phân quyền ---
     @Column(length = 30)

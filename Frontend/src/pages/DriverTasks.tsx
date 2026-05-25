@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import axiosInstance from '../api/axiosInstance';
+import axiosInstance from '../api/axiosInstance'; // Nhớ check lại đường dẫn import của bạn
 import { 
   Truck, MapPin, CheckCircle, Navigation, 
-  Loader2, Package, X, Camera, 
+  Loader2, Package, X, Camera, AlertTriangle, Image as ImageIcon
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -13,13 +13,28 @@ import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 // --- FIX ICON LEAFLET ---
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-let DefaultIcon = L.icon({
-    iconUrl: markerIcon,
-    shadowUrl: markerShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
+const DefaultIcon = L.icon({
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
 });
 L.Marker.prototype.options.icon = DefaultIcon;
+
+// --- THUẬT TOÁN HAVERSINE TÍNH KHOẢNG CÁCH (MÉT) ---
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // Bán kính trái đất (mét)
+  const p1 = lat1 * Math.PI / 180;
+  const p2 = lat2 * Math.PI / 180;
+  const dp = (lat2 - lat1) * Math.PI / 180;
+  const dl = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(dp / 2) * Math.sin(dp / 2) +
+            Math.cos(p1) * Math.cos(p2) *
+            Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Trả về số mét
+};
 
 // --- COMPONENT DẪN ĐƯỜNG REAL-TIME ---
 const RoutingMachine = ({ userPos, targetPos }: { userPos: [number, number], targetPos: [number, number] }) => {
@@ -29,28 +44,18 @@ const RoutingMachine = ({ userPos, targetPos }: { userPos: [number, number], tar
   useEffect(() => {
     if (!map || !userPos || !targetPos) return;
 
-    // Khởi tạo bộ dẫn đường thực tế trên bản đồ
     routingControlRef.current = (L as any).Routing.control({
-      waypoints: [
-        L.latLng(userPos[0], userPos[1]),
-        L.latLng(targetPos[0], targetPos[1])
-      ],
-      lineOptions: {
-        styles: [{ color: '#2563eb', weight: 6, opacity: 0.8 }],
-        extendToWaypoints: true,
-        missingRouteTolerance: 10
-      },
+      waypoints: [ L.latLng(userPos[0], userPos[1]), L.latLng(targetPos[0], targetPos[1]) ],
+      lineOptions: { styles: [{ color: '#3b82f6', weight: 6, opacity: 0.8 }], extendToWaypoints: true, missingRouteTolerance: 10 },
       addWaypoints: false,
       draggableWaypoints: false,
       fitSelectedRoutes: true,
-      show: false, // Ẩn bảng hướng dẫn text để tối ưu màn hình điện thoại
-      createMarker: () => null // Không tạo marker phụ của routing
+      show: false, 
+      createMarker: () => null
     }).addTo(map);
 
     return () => {
-      if (routingControlRef.current && map) {
-        map.removeControl(routingControlRef.current);
-      }
+      if (routingControlRef.current && map) map.removeControl(routingControlRef.current);
     };
   }, [map, userPos, targetPos]);
 
@@ -62,10 +67,14 @@ const DriverTasks = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
   
-  // State Bản đồ & Dẫn đường
+  // State Bản đồ & Nghiệp vụ
   const [showMap, setShowMap] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [driverPos, setDriverPos] = useState<[number, number] | null>(null);
+  
+  // LỚP KHIÊN VALIDATION: Trạng thái lỗi và ảnh minh chứng
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null); // Giả lập chụp ảnh
 
   const fetchTasks = async () => {
     try {
@@ -74,7 +83,6 @@ const DriverTasks = () => {
       const user = JSON.parse(userStr);
       
       const res = await axiosInstance.get(`/orders/my-tasks?driverId=${user.id}`);
-      // Sắp xếp theo thứ tự giao hàng
       const sorted = res.data.sort((a: any, b: any) => (a.deliverySequence || 0) - (b.deliverySequence || 0));
       setTasks(sorted);
     } catch (err) {
@@ -86,50 +94,73 @@ const DriverTasks = () => {
 
   useEffect(() => {
     fetchTasks();
-
-    // THEO DÕI VỊ TRÍ REAL-TIME (GPS WATCH)
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setDriverPos([pos.coords.latitude, pos.coords.longitude]);
-      },
+      (pos) => setDriverPos([pos.coords.latitude, pos.coords.longitude]),
       (err) => console.error("Lỗi GPS:", err),
-      { enableHighAccuracy: true,}
+      { enableHighAccuracy: true, maximumAge: 10000 }
     );
-
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  const handleComplete = (orderId: string) => {
+  // Hàm giả lập mở Camera chụp ảnh
+  const handleCaptureImage = () => {
+    // Trong thực tế sẽ dùng input type="file" capture="environment"
+    setCapturedImage("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="); // Ảnh Base64 giả lập
+    setErrorMsg(null);
+  };
+
+  const handleComplete = async (task: any) => {
+    setErrorMsg(null);
+
+    // 1. VALIDATE BẬT GPS
     if (!driverPos) {
-      alert("Đang xác định vị trí của bạn, vui lòng đợi...");
+      setErrorMsg("Đang tìm tín hiệu GPS. Vui lòng bật định vị!");
       return;
     }
-    setSubmitting(orderId);
+
+    // 2. VALIDATE KHOẢNG CÁCH (VẪN TÍNH NHƯNG TẠM TẮT CHẶN ĐỂ DEMO)
+    const distance = calculateDistance(driverPos[0], driverPos[1], task.latitude, task.longitude);
     
-    // Gửi yêu cầu hoàn tất kèm tọa độ thực tế lúc bấm nút
-    setTimeout(async () => {
-        try {
-            await axiosInstance.post(`/orders/${orderId}/complete`, {
-              actualLatitude: driverPos[0],
-              actualLongitude: driverPos[1],
-              status: 'DELIVERED',
-              evidenceImage: "https://via.placeholder.com/300"
-            });
-            alert("Giao hàng thành công!");
-            setShowMap(false);
-            fetchTasks();
-          } catch (err) {
-            alert("Lỗi cập nhật trạng thái đơn hàng.");
-          } finally {
-            setSubmitting(null);
-          }
-    }, 500);
+    // --- BẮT ĐẦU ĐOẠN COMMENT ĐỂ DEMO ---
+    /* if (distance > 500) {
+      setErrorMsg(`Bạn đang cách điểm giao ${Math.round(distance)}m. Phải đến gần (<500m) mới được hoàn tất!`);
+      return;
+    }
+    */
+    // --- KẾT THÚC ĐOẠN COMMENT ---
+    
+    console.log(`[DEMO MODE] Khoảng cách thực tế tới khách hàng: ${Math.round(distance)} mét`);
+
+    // 3. VALIDATE ẢNH MINH CHỨNG (Vẫn giữ để demo luồng chụp ảnh cho đẹp)
+    if (!capturedImage) {
+      setErrorMsg("Bắt buộc phải chụp ảnh minh chứng trước khi hoàn tất!");
+      return;
+    }
+
+    setSubmitting(task.id);
+    
+    try {
+      await axiosInstance.post(`/orders/${task.id}/complete`, {
+        actualLatitude: driverPos[0],
+        actualLongitude: driverPos[1],
+        status: 'DELIVERED',
+        evidenceImage: capturedImage
+      });
+      
+      setShowMap(false);
+      setCapturedImage(null); // Reset ảnh
+      fetchTasks();
+    } catch (err) {
+      setErrorMsg("Lỗi cập nhật hệ thống. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(null);
+    }
   };
 
   if (loading) return (
     <div className="flex flex-col justify-center items-center h-screen bg-slate-50">
       <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-      <p className="text-slate-500 font-black text-sm uppercase tracking-widest">Đang tải lộ trình...</p>
+      <p className="text-slate-500 font-black text-sm uppercase tracking-widest animate-pulse">Đang tải lộ trình...</p>
     </div>
   );
 
@@ -137,12 +168,16 @@ const DriverTasks = () => {
     <div className="max-w-md mx-auto p-4 pb-24 bg-slate-50 min-h-screen font-sans">
       <header className="flex items-center justify-between mb-8 pt-4">
         <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-100">
+          <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-200">
             <Truck size={24} />
           </div>
-          <h1 className="text-xl font-black text-slate-800 tracking-tight">Nhiệm vụ của tôi</h1>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Nhiệm vụ</h1>
         </div>
-        <div className="bg-white px-3 py-1.5 rounded-full border border-slate-200 text-[10px] font-black text-blue-600">
+        <div className="bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm text-xs font-black text-blue-600 flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+          </span>
           {tasks.filter(t => t.status === 'ASSIGNED').length} ĐƠN CHỜ
         </div>
       </header>
@@ -150,63 +185,57 @@ const DriverTasks = () => {
       {/* DANH SÁCH THẺ ĐƠN HÀNG */}
       <div className="space-y-4">
         {tasks.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200">
-            <Package className="mx-auto text-slate-200 mb-4" size={64} />
-            <p className="text-slate-400 font-bold">Không có đơn hàng nào!</p>
+          <div className="text-center py-20 bg-white rounded-[2rem] border border-slate-200 shadow-sm">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Package className="text-slate-300" size={40} />
+            </div>
+            <p className="text-slate-500 font-bold">Hôm nay bạn không có đơn hàng!</p>
           </div>
         ) : (
           tasks.map((task, index) => (
-            <div key={task.id} className={`bg-white rounded-[2rem] p-6 shadow-sm border border-slate-200 transition-all ${task.status === 'DELIVERED' ? 'opacity-40 grayscale' : ''}`}>
-              <div className="flex justify-between items-start mb-4">
-                <span className="bg-slate-900 text-white text-[10px] font-black px-3 py-1 rounded-full">#{task.orderCode}</span>
-                <span className="text-blue-600 font-black text-[10px] uppercase">Điểm dừng {index + 1}</span>
+            <div key={task.id} className={`bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-100 transition-all ${task.status === 'DELIVERED' ? 'opacity-50 grayscale' : 'hover:shadow-md'}`}>
+              <div className="flex justify-between items-center mb-4">
+                <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1.5 rounded-lg">#{task.orderCode}</span>
+                <span className="text-blue-600 font-black text-[10px] uppercase bg-blue-50 px-2 py-1 rounded-md">Điểm dừng {index + 1}</span>
               </div>
               
               <div className="flex gap-4 mb-6">
-                <div className="w-10 h-10 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center shrink-0">
-                  <MapPin size={20} />
+                <div className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center shrink-0">
+                  <MapPin size={24} />
                 </div>
-                <div className="min-w-0">
-                  <p className="font-black text-slate-800 text-base truncate">{task.customerName}</p>
-                  <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{task.deliveryAddress}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-800 text-lg truncate">{task.customerName}</p>
+                  <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed mt-0.5">{task.deliveryAddress}</p>
                 </div>
               </div>
 
               {task.status === 'ASSIGNED' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => { setSelectedTask(task); setShowMap(true); }}
-                    className="flex items-center justify-center gap-2 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-blue-600 transition-all active:scale-95 shadow-lg shadow-slate-200"
-                  >
-                    <Navigation size={16} /> Dẫn đường
-                  </button>
-                  <button 
-                    onClick={() => handleComplete(task.id)}
-                    className="flex items-center justify-center gap-2 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-100 active:scale-95"
-                  >
-                    <CheckCircle size={16} /> Hoàn tất
-                  </button>
-                </div>
+                <button 
+                  onClick={() => { setSelectedTask(task); setShowMap(true); setErrorMsg(null); setCapturedImage(null); }}
+                  className="w-full flex items-center justify-center gap-2 py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-blue-600 transition-colors shadow-md active:scale-[0.98]"
+                >
+                  <Navigation size={18} /> Mở bản đồ & Giao hàng
+                </button>
               )}
             </div>
           ))
         )}
       </div>
 
-      {/* MODAL DẪN ĐƯỜNG REAL-TIME TOÀN MÀN HÌNH */}
+      {/* MODAL BẢN ĐỒ TOÀN MÀN HÌNH */}
       {showMap && selectedTask && (
-        <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-in slide-in-from-bottom duration-300">
-          <div className="p-4 flex items-center justify-between border-b bg-white z-10 shadow-sm">
+        <div className="fixed inset-0 z-[100] bg-slate-100 flex flex-col animate-in slide-in-from-bottom duration-300">
+          <div className="p-4 flex items-center justify-between bg-white z-10 shadow-sm">
             <div className="flex items-center gap-3">
                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-black">
                   {tasks.findIndex(t => t.id === selectedTask.id) + 1}
                </div>
                <div>
                   <h2 className="font-black text-slate-800 text-sm">Đang dẫn đường</h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">{selectedTask.customerName}</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">{selectedTask.customerName}</p>
                </div>
             </div>
-            <button onClick={() => setShowMap(false)} className="p-2 bg-slate-100 text-slate-500 rounded-full"><X/></button>
+            <button onClick={() => setShowMap(false)} className="p-2.5 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200 transition-colors"><X size={20}/></button>
           </div>
           
           <div className="flex-1 relative">
@@ -214,50 +243,68 @@ const DriverTasks = () => {
               center={driverPos || [selectedTask.latitude, selectedTask.longitude]} 
               zoom={16} 
               style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
             >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               
-              {/* Vị trí Tài xế - Sẽ tự động dịch chuyển khi driverPos thay đổi */}
               {driverPos && (
                 <Marker position={driverPos} icon={L.divIcon({
                   className: 'custom-div-icon',
                   html: `<div class="relative flex items-center justify-center">
-                           <div class="absolute w-8 h-8 bg-blue-400 rounded-full animate-ping opacity-40"></div>
-                           <div class="w-5 h-5 bg-blue-600 rounded-full border-2 border-white shadow-xl relative z-10"></div>
+                           <div class="absolute w-10 h-10 bg-blue-500 rounded-full animate-ping opacity-30"></div>
+                           <div class="w-5 h-5 bg-blue-600 rounded-full border-[3px] border-white shadow-xl relative z-10"></div>
                          </div>`,
-                  iconSize: [30, 30],
-                  iconAnchor: [15, 15]
+                  iconSize: [40, 40],
+                  iconAnchor: [20, 20]
                 })}>
-                  <Popup>Bạn đang ở đây</Popup>
+                  <Popup>Vị trí của bạn</Popup>
                 </Marker>
               )}
 
-              {/* Điểm đích của khách hàng */}
               <Marker position={[selectedTask.latitude, selectedTask.longitude]}>
-                <Popup>Điểm giao: {selectedTask.orderCode}</Popup>
+                <Popup>Giao cho: {selectedTask.customerName}</Popup>
               </Marker>
 
-              {/* VẼ ĐƯỜNG ĐI DỰA TRÊN GPS THỰC TẾ */}
               {driverPos && (
                 <RoutingMachine userPos={driverPos} targetPos={[selectedTask.latitude, selectedTask.longitude]} />
               )}
             </MapContainer>
             
-            {/* Thanh thông tin dưới cùng của bản đồ */}
-            <div className="absolute bottom-6 left-4 right-4 bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-100 z-[1000] flex items-center justify-between">
-                <div className="flex-1">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Địa chỉ giao hàng</p>
-                    <p className="text-xs font-bold text-slate-800 line-clamp-1">{selectedTask.deliveryAddress}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button className="bg-slate-100 p-4 rounded-2xl text-slate-500"><Camera size={20}/></button>
-                    <button 
-                       disabled={submitting === selectedTask.id}
-                       onClick={() => handleComplete(selectedTask.id)}
-                       className="bg-green-600 text-white p-4 rounded-2xl shadow-lg shadow-green-100 active:scale-90"
-                    >
-                       {submitting === selectedTask.id ? <Loader2 className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
-                    </button>
+            {/* TẤM ĐIỀU KHIỂN BÊN DƯỚI */}
+            <div className="absolute bottom-6 left-4 right-4 bg-white p-5 rounded-3xl shadow-2xl border border-slate-100 z-[1000] flex flex-col gap-4">
+                
+                {/* Khu vực thông báo lỗi Validate */}
+                {errorMsg && (
+                    <div className="bg-red-50 p-3 rounded-xl flex gap-2 items-start text-red-600 text-xs font-medium border border-red-100">
+                        <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                        <p>{errorMsg}</p>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Địa chỉ giao</p>
+                        <p className="text-sm font-bold text-slate-800 line-clamp-2">{selectedTask.deliveryAddress}</p>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Nút chụp ảnh minh chứng */}
+                        <button 
+                            onClick={handleCaptureImage}
+                            className={`p-4 rounded-2xl transition-all ${capturedImage ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                            {capturedImage ? <ImageIcon size={24}/> : <Camera size={24}/>}
+                        </button>
+
+                        {/* Nút hoàn tất */}
+                        <button 
+                           disabled={submitting === selectedTask.id}
+                           onClick={() => handleComplete(selectedTask)}
+                           className="bg-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 disabled:bg-blue-400 transition-all flex items-center gap-2"
+                        >
+                           {submitting === selectedTask.id ? <Loader2 className="animate-spin" size={24}/> : <CheckCircle size={24}/>}
+                        </button>
+                    </div>
                 </div>
             </div>
           </div>

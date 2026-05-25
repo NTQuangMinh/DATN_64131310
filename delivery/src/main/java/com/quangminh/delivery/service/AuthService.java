@@ -1,11 +1,13 @@
 package com.quangminh.delivery.service;
 
+import com.quangminh.delivery.dto.UserRegistrationDTO;
 import com.quangminh.delivery.entity.User;
 import com.quangminh.delivery.repository.UserRepository;
 import com.quangminh.delivery.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,7 +29,7 @@ public class AuthService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Tài khoản không tồn tại!"));
 
-        // 2. Kiểm tra mật khẩu (so sánh pass thô với pass đã mã hóa trong DB)
+        // 2. Kiểm tra mật khẩu
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("Mật khẩu không chính xác!");
         }
@@ -35,20 +37,33 @@ public class AuthService {
         // 3. Tạo JWT Token
         String token = tokenProvider.generateToken(user.getUsername(), user.getRole());
 
-        // 4. Trả về dữ liệu (Sử dụng .put thay vì .add)
+        // 4. Đóng gói toàn bộ dữ liệu trả về (Thay vì để Controller phải làm)
         Map<String, Object> response = new HashMap<>();
         response.put("token", token);
-        response.put("role", user.getRole());
-        response.put("fullName", user.getFullName());
+
+        // Ẩn mật khẩu trước khi trả về User info
+        user.setPassword(null);
+        response.put("user", user);
 
         return response;
     }
 
-    // Hàm đăng ký để bạn tạo tài khoản test trực tiếp từ Swagger
-    public User register(User user) {
-        // Mã hóa mật khẩu trước khi lưu vào DB
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        // Mặc định tạo mới chưa có Public Key (sẽ cập nhật khi tài xế ký số)
+    @Transactional
+    public User register(UserRegistrationDTO dto) {
+        // Kiểm tra xem Username đã tồn tại chưa
+        if (userRepository.findByUsername(dto.getUsername()).isPresent()) {
+            throw new RuntimeException("Tên đăng nhập đã tồn tại trong hệ thống!");
+        }
+
+        // Logic chuyển đổi từ DTO sang Entity được xử lý tại Service
+        User user = new User();
+        user.setUsername(dto.getUsername());
+        user.setFullName(dto.getFullName());
+        user.setRole(dto.getRole());
+
+        // Mã hóa mật khẩu
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+
         return userRepository.save(user);
     }
 }

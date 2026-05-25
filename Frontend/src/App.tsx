@@ -43,7 +43,6 @@ function App() {
                     <Route path="/orders" element={<OrderList />} />
                     <Route path="/routes" element={<RouteCreate/>} />
                     <Route path="/drivertasks" element={<DriverTasks />} />
-
                     {/* Nếu vào đường dẫn lạ, tự động về Dashboard */}
                     <Route path="*" element={<Navigate to="/dashboard" />} />
                   </Routes>
