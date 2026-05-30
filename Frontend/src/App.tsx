@@ -3,9 +3,10 @@ import Dashboard from './pages/Dashboard';
 import RouteCreate from './pages/RouteCreate';
 import Login from './pages/Login';
 import OrderList from './pages/OrderList';
+import DriverManagement from './pages/DriverManagement';
+import DriverTracking from './pages/DriverTracking';
 import Sidebar from './components/Sidebar';
-import DriverTasks from './pages/DriverTasks';
-import Verifypage from './pages/VerifyPage'; // Đảm bảo đường dẫn import đúng
+
 
 // Component bảo vệ Route: Nếu chưa có Token thì đá về trang Login
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
@@ -17,17 +18,9 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* ========================================================= */}
-        {/* KHU VỰC PUBLIC: KHÔNG CẦN ĐĂNG NHẬP AI CŨNG VÀO ĐƯỢC      */}
-        {/* ========================================================= */}
+
         <Route path="/login" element={<Login />} />
         
-        {/* TRANG KIỂM CHỨNG CÔNG KHAI DÀNH CHO KHÁCH HÀNG */}
-        <Route path="/verify" element={<Verifypage />} />
-
-        {/* ========================================================= */}
-        {/* KHU VỰC PRIVATE: BẮT BUỘC ĐĂNG NHẬP (ADMIN)               */}
-        {/* ========================================================= */}
         <Route
           path="/*"
           element={
@@ -40,9 +33,10 @@ function App() {
                 <div className="flex-1 ml-64 p-8">
                   <Routes>
                     <Route path="/dashboard" element={<Dashboard/>} />
+                    <Route path="/users/drivers" element={<DriverManagement />} />
                     <Route path="/orders" element={<OrderList />} />
                     <Route path="/routes" element={<RouteCreate/>} />
-                    <Route path="/drivertasks" element={<DriverTasks />} />
+                    <Route path="/drivertracking" element={<DriverTracking />} />
                     {/* Nếu vào đường dẫn lạ, tự động về Dashboard */}
                     <Route path="*" element={<Navigate to="/dashboard" />} />
                   </Routes>

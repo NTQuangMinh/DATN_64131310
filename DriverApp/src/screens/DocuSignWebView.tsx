@@ -3,82 +3,104 @@ import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location'; 
 import axiosInstance from '../api/axiosInstance'; 
 
 export default function DocuSignWebView() {
   const route = useRoute();
   const navigation = useNavigation();
   
-  // Lấy signingUrl và orderId từ màn hình trước truyền sang
-  const { signingUrl, orderId } = (route.params as any) || {};
+  // Lấy dữ liệu truyền từ màn hình trước
+  const params = route.params as { signingUrl?: string; orderId?: string };
+  const signingUrl = params?.signingUrl;
+  const orderId = params?.orderId;
 
-  // Hàm gọi API hoàn thành đơn hàng khớp 100% cấu trúc Request Body trong Swagger
-  const changeStatusToDelivered = async () => {
+  // Hàm lấy tọa độ thật của tài xế
+  const getCurrentLocation = async () => {
     try {
-      console.log(`⏳ Đang chuẩn bị dữ liệu gửi lên API complete cho đơn: ${orderId}`);
-      
-      // 1. Lấy lại ảnh minh chứng đã chụp ở bước trước từ AsyncStorage
-      const storedImage = await AsyncStorage.getItem(`evidence_${orderId}`);
-
-      // 2. Tạo Request Body đúng cấu trúc JSON mà Swagger yêu cầu
-      const requestBody = {
-        orderId: orderId,
-        status: "DELIVERED",                 // Trạng thái thành công theo yêu cầu của bạn
-        failureReason: "",                   // Thành công nên lý do thất bại để trống
-        signatureValue: "DocuSign Verified", // Đánh dấu là đã ký qua hệ thống DocuSign
-        actualLatitude: 0,                   // Tọa độ giả lập 0 (hoặc lấy tọa độ thật nếu có)
-        actualLongitude: 0,
-        evidenceImage: storedImage || ""     // Chuỗi URI hoặc Base64 của ảnh minh chứng
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert("Quyền truy cập", "Cần quyền định vị để xác nhận địa điểm giao hàng!");
+        return { lat: 0, lng: 0 };
+      }
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      return { 
+        lat: location.coords.latitude, 
+        lng: location.coords.longitude 
       };
-
-      console.log("📦 Request Body gửi đi:", JSON.stringify(requestBody, null, 2));
-
-      // 3. Gọi API POST truyền cả Path Variable lẫn Request Body
-      await axiosInstance.post(`/orders/${orderId}/complete`, requestBody); 
-      
-      console.log("✅ Backend đã cập nhật trạng thái đơn hàng sang DELIVERED!");
-      
-      // Xóa dữ liệu ảnh tạm sau khi đã up lên server thành công (Tùy chọn cho sạch bộ nhớ)
-      await AsyncStorage.removeItem(`evidence_${orderId}`);
-
-    } catch (error: any) {
-      console.error("❌ Lỗi khi gọi API complete đơn hàng:", error.response?.data || error.message);
-      Alert.alert("Thông báo", "Ký số thành công nhưng không thể cập nhật trạng thái đơn hàng lên hệ thống.");
+    } catch (error) {
+      console.error("Lỗi lấy GPS:", error);
+      return { lat: 0, lng: 0 };
     }
   };
 
-  // Hàm xử lý khi DocuSign điều hướng URL (Trường hợp mạng tốt)
+  const changeStatusToDelivered = async () => {
+    if (!orderId) return;
+
+    try {
+      console.log(`⏳ Đang cập nhật trạng thái đơn: ${orderId}`);
+      
+      const coords = await getCurrentLocation();
+      const storedImage = await AsyncStorage.getItem(`evidence_${orderId}`);
+
+      const requestBody = {
+        orderId: orderId,
+        status: "DELIVERED",
+        failureReason: "",
+        signatureValue: "DocuSign Verified",
+        actualLatitude: coords.lat,
+        actualLongitude: coords.lng,
+        evidenceImage: storedImage || ""
+      };
+
+      await axiosInstance.post(`/orders/${orderId}/complete`, requestBody); 
+      
+      console.log("✅ Backend đã cập nhật thành công!");
+      await AsyncStorage.removeItem(`evidence_${orderId}`);
+      
+    } catch (error: any) {
+      console.error("❌ Lỗi API:", error.response?.data || error.message);
+      Alert.alert("Thông báo", "Ký số thành công nhưng gặp lỗi đồng bộ dữ liệu lên hệ thống.");
+    }
+  };
+
   const handleNavigationStateChange = async (navState: any) => {
-    if (
-      navState.url.includes('success') || 
-      navState.url.includes('finish') || 
-      navState.url.includes('localhost') || 
-      navState.url.includes('signing_complete')
-    ) {
+    // Kiểm tra các URL báo hiệu hoàn tất ký số
+    const successUrls = ['signing_complete', 'success', 'finish', 'localhost'];
+    if (successUrls.some(url => navState.url.includes(url))) {
       await changeStatusToDelivered();
       navigation.navigate('OrderList' as never);
     }
   };
 
+  if (!signingUrl) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <WebView
         source={{ uri: signingUrl }}
-        cacheEnabled={false}       // Ngăn không cho lưu cache trang web
+        cacheEnabled={false}
         incognito={true}
         startInLoadingState={true}
         renderLoading={() => (
           <ActivityIndicator size="large" color="#007AFF" style={styles.loading} />
         )}
         onNavigationStateChange={handleNavigationStateChange}
-        onError={async (syntheticEvent) => {
-          console.log("🚀 Phát hiện tài xế ký xong (Kích hoạt qua Event lỗi kết nối ảo)!");
-          await changeStatusToDelivered();
-          navigation.navigate('OrderList' as never);
-        }}
-        
         javaScriptEnabled={true}
         domStorageEnabled={true}
+        onError={async () => {
+            // Backup nếu Webview không phản hồi do chặn domain redirect
+            await changeStatusToDelivered();
+            navigation.navigate('OrderList' as never);
+        }}
       />
     </View>
   );

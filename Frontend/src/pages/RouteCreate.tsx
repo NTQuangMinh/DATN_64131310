@@ -50,7 +50,7 @@ const RoutingControl = ({ waypoints }: { waypoints: L.LatLng[] }) => {
 
 const RouteCreate = () => {
   const [orders, setOrders] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState([]);
+  const [drivers, setDrivers] = useState<any[]>([]); // Sửa thành mảng any[]
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [selectedDriver, setSelectedDriver] = useState('');
   
@@ -66,10 +66,17 @@ const RouteCreate = () => {
       try {
         const [ordersRes, driversRes] = await Promise.all([
           axiosInstance.get('/orders'),
-          axiosInstance.get('/users/drivers')
+          // 🌟 FIX 1: Đổi đường dẫn thành /users và thêm size=100 để lấy tất cả tài xế
+          axiosInstance.get('/users?size=100') 
         ]);
+        
         setOrders(ordersRes.data.filter((o: any) => o.status === 'PENDING'));
-        setDrivers(driversRes.data);
+        
+        // 🌟 FIX 2: Lấy dữ liệu từ thuộc tính .content do đã phân trang ở Backend
+        // (Dùng dấu || để đề phòng nếu backend gửi thẳng mảng thì vẫn không bị lỗi)
+        const driverList = driversRes.data.content || driversRes.data;
+        setDrivers(driverList);
+        
       } catch (err) {
         console.error("Lỗi tải dữ liệu", err);
       } finally {
@@ -181,7 +188,10 @@ const RouteCreate = () => {
               >
                 <option value="">-- Click để chọn tài xế --</option>
                 {drivers.map((d: any) => (
-                  <option key={d.id} value={d.id}>{d.fullName}</option>
+                  // 🌟 FIX 3: Hiển thị Username và Phone mới cập nhật
+                  <option key={d.id} value={d.id}>
+                    {d.fullName} (@{d.username}) - {d.phone}
+                  </option>
                 ))}
               </select>
             </div>
@@ -279,7 +289,7 @@ const RouteCreate = () => {
           
           <div className="absolute top-6 right-6 z-[1000] bg-white/90 backdrop-blur-md px-5 py-3 rounded-2xl shadow-xl border border-white/50 flex items-center gap-3">
              <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></div>
-             <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Lộ trình AI dự kiến</span>
+             <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Lộ trình dự kiến</span>
           </div>
         </div>
 

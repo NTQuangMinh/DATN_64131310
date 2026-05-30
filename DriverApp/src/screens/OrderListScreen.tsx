@@ -9,6 +9,9 @@ import * as Location from 'expo-location';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
+import { useLocationTracking } from '../hooks/useLocationTracking'; 
+import { Ionicons } from '@expo/vector-icons'; // Thêm icon
+import ChangePasswordModal from '../screens/ChangePasswordModal'; // Đảm bảo đúng đường dẫn tới file Modal của bạn
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,12 +23,18 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
   const [routeCoords, setRouteCoords] = useState<any[]>([]); 
   const [selectedOrders, setSelectedOrders] = useState<any[]>([]);
   
-  // HOÀN THIỆN 3: Bộ đôi State quản lý Modal xem chi tiết đơn hàng cho tài xế
+  // State quản lý Modal chi tiết đơn hàng
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // 🌟 STATE QUẢN LÝ MODAL ĐỔI MẬT KHẨU
+  const [isChangePwdOpen, setIsChangePwdOpen] = useState(false);
   
   const mapRef = useRef<MapView>(null);
   const isFocused = useIsFocused();
+
+  // Bắn vị trí định vị ngầm
+  useLocationTracking();
 
   useEffect(() => {
     let locationSubscription: any;
@@ -99,6 +108,20 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
     }
   };
 
+  // 🌟 ĐÃ SỬA: Hàm Check-in trước khi Ký nhận (Ghi nhận checkinTime)
+  const handleCheckin = async (orderId: string) => {
+    try {
+      setLoading(true);
+      await axiosInstance.put(`/orders/${orderId}/checkin`);
+      Alert.alert("Thành công", "Đã ghi nhận có mặt tại điểm giao! Vui lòng cho khách hàng kiểm tra và ký nhận.");
+      fetchOrders(); 
+    } catch (error) {
+      Alert.alert("Lỗi", "Không thể Check-in lúc này.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleToggleSelectOrder = (order: any) => {
     setSelectedOrders((prevSelected) => {
       const isExist = prevSelected.some(item => item.id === order.id);
@@ -114,10 +137,8 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
     });
   };
 
-  // Thêm một state mới ở trên cùng component (dưới các state cũ) để lưu thứ tự:
   const [optimalSequence, setOptimalSequence] = useState<any[]>([]);
 
-  // Thay thế hàm cũ bằng hàm này:
   const calculateOptimizedRoute = async () => {
     if (!driverLocation || selectedOrders.length === 0) {
       setRouteCoords([]);
@@ -125,7 +146,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
       return;
     }
     
-    // Tọa độ đầu tiên luôn là tài xế (source=first)
     let coordinateString = `${driverLocation.longitude},${driverLocation.latitude}`;
     selectedOrders.forEach(order => {
       coordinateString += `;${order.longitude},${order.latitude}`;
@@ -137,7 +157,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
       const json = await resp.json();
       
       if (json.trips && json.trips.length > 0) {
-        // 1. Vẽ đường đi (Polyline)
         const points = json.trips[0].geometry.coordinates.map((coord: any) => ({
           latitude: coord[1],
           longitude: coord[0],
@@ -147,10 +166,8 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
           edgePadding: { top: 70, right: 70, bottom: 70, left: 70 }, animated: true,
         });
 
-        // 2. BÓC TÁCH THỨ TỰ GIAO HÀNG (Dựa theo waypoint_index của OSRM)
-        // json.waypoints chứa thứ tự di chuyển tối ưu do AI sắp xếp
         if (json.waypoints && json.waypoints.length > 1) {
-          const orderWaypoints = json.waypoints.slice(1); // Bỏ điểm index 0 (Tài xế)
+          const orderWaypoints = json.waypoints.slice(1); 
           
           const sortedOrders = [...selectedOrders].sort((a, b) => {
             const indexA = orderWaypoints[selectedOrders.indexOf(a)].waypoint_index;
@@ -158,7 +175,7 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
             return indexA - indexB;
           });
           
-          setOptimalSequence(sortedOrders); // Lưu lại danh sách đã sắp xếp 1->2->3
+          setOptimalSequence(sortedOrders); 
         }
       }
     } catch (error) {
@@ -183,7 +200,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
       .catch((err) => console.log("Lỗi gọi điện:", err));
   };
 
-  // SỬA LỖI 2: Cấu hình daddr buộc Apple Map hiển thị chính xác cờ đích đến lộ trình
   const handleOpenExternalMap = (latitude: number, longitude: number, address: string) => {
     if (!latitude || !longitude) {
       Alert.alert("Thông báo", "Đơn hàng chưa có tọa độ GPS chính xác.");
@@ -206,7 +222,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
     }
   };
 
-  // Hàm mở Modal xem chi tiết
   const handleOpenDetail = (order: any) => {
     setActiveOrder(order);
     setIsDetailModalOpen(true);
@@ -236,9 +251,17 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
       </View>
 
       <View style={styles.listContainer}>
+        {/* 🌟 ĐÃ CẬP NHẬT HEADER: THÊM NÚT ĐỔI MẬT KHẨU */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Lịch trình giao hàng ({orders.length} đơn)</Text>
-          <TouchableOpacity onPress={onLogout}><Text style={{color: 'red', fontWeight: 'bold'}}>Thoát</Text></TouchableOpacity>
+          <Text style={styles.headerTitle}>Lịch trình ({orders.length} đơn)</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={() => setIsChangePwdOpen(true)} style={styles.headerBtn}>
+              <Ionicons name="settings-outline" size={20} color="#64748b" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLogout} style={styles.headerBtn}>
+              <Ionicons name="log-out-outline" size={22} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loading && !refreshing ? (
@@ -259,16 +282,12 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
             
             renderItem={({ item }) => {
               const isSelected = selectedOrders.some(o => o.id === item.id);
-              const isAssigned = item.status === 'ASSIGNED';
-              
-              // TÌM THỨ TỰ CỦA ĐƠN NÀY TRONG TUYẾN ĐƯỜNG TỐI ƯU
               const routeIndex = optimalSequence.findIndex(o => o.id === item.id);
               const stepNumber = routeIndex !== -1 ? routeIndex + 1 : null;
 
               return (
                 <View style={[styles.card, isSelected && styles.selectedCard]}>
                   
-                  {/* === HIỂN THỊ CHỈ DẪN TUYẾN ĐƯỜNG NẾU ĐƯỢC CHỌN === */}
                   {isSelected && stepNumber !== null && (
                     <View style={{ backgroundColor: '#E1F0FF', padding: 6, borderTopLeftRadius: 12, borderTopRightRadius: 12, marginHorizontal: -15, marginTop: -15, marginBottom: 10, borderBottomWidth: 1, borderColor: '#007AFF', alignItems: 'center' }}>
                       <Text style={{ fontWeight: 'bold', color: '#007AFF', fontSize: 12 }}>
@@ -277,7 +296,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                     </View>
                   )}
 
-                  {/* KHU VỰC THÔNG TIN (Click để chọn gom đơn) */}
                   <TouchableOpacity 
                     style={styles.clickableInfoArea} 
                     onPress={() => handleToggleSelectOrder(item)}
@@ -287,14 +305,17 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                     <Text style={styles.addr} numberOfLines={1}>📍 {item.deliveryAddress}</Text>
                     
                     <View style={{ flexDirection: 'row', marginTop: 6, alignItems: 'center' }}>
-                      <Text style={[styles.statusBadge, isAssigned ? styles.badgeAssigned : styles.badgeDelivering]}>
-                        {isAssigned ? 'ĐƠN MỚI' : 'ĐANG GIAO'}
+                      <Text style={[styles.statusBadge, 
+                        item.status === 'ASSIGNED' ? styles.badgeAssigned : 
+                        item.status === 'DELIVERING' ? styles.badgeDelivering : 
+                        styles.badgeArrived
+                      ]}>
+                        {item.status === 'ASSIGNED' ? 'ĐƠN MỚI' : 
+                         item.status === 'DELIVERING' ? 'ĐANG GIAO' : 'ĐÃ ĐẾN NƠI'}
                       </Text>
                     </View>
                   </TouchableOpacity>
-                
 
-                  {/* Khu vực 2: Hàng nút bấm chức năng tách biệt hoàn toàn nằm phía dưới */}
                   <View style={styles.quickActionsRow}>
                     <TouchableOpacity 
                       onPress={() => handleOpenExternalMap(item.latitude, item.longitude, item.deliveryAddress)} 
@@ -310,7 +331,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                       <Text style={styles.callActionText}>📞 Gọi điện</Text>
                     </TouchableOpacity>
 
-                    {/* Nút xem chi tiết đơn hàng mới tích hợp */}
                     <TouchableOpacity 
                       onPress={() => handleOpenDetail(item)} 
                       style={styles.inlineActionBtn}
@@ -319,15 +339,23 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                     </TouchableOpacity>
                   </View>
 
-                  {/* Khu vực 3: Nút hành động chính (Bên phải Card) */}
+                  {/* 🌟 ĐÃ CẬP NHẬT GIAO DIỆN NÚT 3 BƯỚC: Đi giao -> Đến nơi -> Ký nhận */}
                   <View style={styles.mainActionContainer}>
-                    {item.status === 'ASSIGNED' ? (
+                    {item.status === 'ASSIGNED' && (
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#007AFF' }]} onPress={() => handleStartDelivery(item.id)}>
                         <Text style={styles.btnText}>Đi giao</Text>
                       </TouchableOpacity>
-                    ) : (
+                    )}
+
+                    {item.status === 'DELIVERING' && (
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FF9500' }]} onPress={() => handleCheckin(item.id)}>
+                        <Text style={styles.btnText}>Đến nơi</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {item.status === 'ARRIVED' && (
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#34C759' }]} onPress={() => (navigation as any).navigate('DeliveryConfirm', { orderId: item.id })}>
-                        <Text style={styles.btnText}>Xác nhận</Text>
+                        <Text style={styles.btnText}>Ký nhận</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -338,9 +366,12 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
         )}
       </View>
 
-      {/* ======================================================================= */}
-      {/* HOÀN THIỆN 3: GIAO DIỆN MODAL CHI TIẾT ĐƠN HÀNG DÀNH CHO TÀI XẾ */}
-      {/* ======================================================================= */}
+      {/* 🌟 GỌI MODAL ĐỔI MẬT KHẨU */}
+      <ChangePasswordModal 
+        visible={isChangePwdOpen} 
+        onClose={() => setIsChangePwdOpen(false)} 
+      />
+
       <Modal visible={isDetailModalOpen} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -376,7 +407,8 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>TRẠNG THÁI HIỆN TẠI:</Text>
                   <Text style={[styles.detailValue, {fontWeight: 'bold', color: activeOrder.status === 'ASSIGNED' ? '#007AFF' : '#FF9500'}]}>
-                    {activeOrder.status === 'ASSIGNED' ? 'ĐƠN MỚI GÁN' : 'ĐANG ĐI GIAO'}
+                    {activeOrder.status === 'ASSIGNED' ? 'ĐƠN MỚI GÁN' : 
+                     activeOrder.status === 'DELIVERING' ? 'ĐANG ĐI GIAO' : 'ĐÃ ĐẾN NƠI'}
                   </Text>
                 </View>
 
@@ -412,15 +444,16 @@ const styles = StyleSheet.create({
   marker: { backgroundColor: '#fff', padding: 6, borderRadius: 20, borderWidth: 1, borderColor: '#007AFF' },
   activeMarker: { backgroundColor: '#34C759', borderColor: '#fff' },
   listContainer: { flex: 1, backgroundColor: '#f8f9fa', borderTopLeftRadius: 25, borderTopRightRadius: 25, marginTop: -20, padding: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  headerTitle: { fontSize: 16, fontWeight: 'bold' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
+  headerRight: { flexDirection: 'row', gap: 15 },
+  headerBtn: { padding: 4 },
   card: { backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10, position: 'relative', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
   selectedCard: { borderColor: '#007AFF', borderWidth: 1.5 },
-  clickableInfoArea: { width: '75%', paddingVertical: 2 }, // Khống chế vùng chạm text chiếm 75% chiều rộng bên trái Card
+  clickableInfoArea: { width: '75%', paddingVertical: 2 }, 
   orderCode: { fontWeight: 'bold', fontSize: 15, color: '#333' },
   addr: { color: '#666', fontSize: 12, marginTop: 4 },
   
-  // Tách biệt hàng nút bấm thành vùng riêng, có padding để ngón tay dễ ấn trúng
   quickActionsRow: { flexDirection: 'row', gap: 14, marginTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f2', paddingTop: 8, width: '75%' },
   inlineActionBtn: { paddingVertical: 4, paddingRight: 4 },
   
@@ -428,7 +461,7 @@ const styles = StyleSheet.create({
   callActionText: { color: '#34C759', fontSize: 11, fontWeight: 'bold' },
   detailBtnText: { color: '#5856D6', fontSize: 11, fontWeight: 'bold' },
   
-  mainActionContainer: { position: 'absolute', right: 15, top: '30%' }, // Ghim cố định cụm nút hành động chính ở góc phải Card
+  mainActionContainer: { position: 'absolute', right: 15, top: '30%' }, 
   actionBtn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
   btnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   
@@ -437,8 +470,8 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, fontSize: 9, fontWeight: 'bold', overflow: 'hidden', borderWidth: 1 },
   badgeAssigned: { backgroundColor: '#E1F0FF', color: '#007AFF', borderColor: '#B3D7FF' },
   badgeDelivering: { backgroundColor: '#FFE6D5', color: '#FF9500', borderColor: '#FFCC00' },
+  badgeArrived: { backgroundColor: '#D1FAE5', color: '#10B981', borderColor: '#34D399' },
 
-  // Styles cấu trúc Modal Chi Tiết Đơn Hàng
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 24, maxHeight: '75%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 12 },

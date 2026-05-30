@@ -9,4 +9,8 @@ public class UserResponseDTO {
     private String username;
     private String fullName;
     private String role;
+    private String phone;
+    private String email;
+    private Double latitude;
+    private Double longitude;
 }

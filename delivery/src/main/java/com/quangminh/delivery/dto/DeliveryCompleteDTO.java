@@ -15,7 +15,6 @@ public class DeliveryCompleteDTO {
     private String status;
 
     private String failureReason;
-    private String signatureValue;
 
     @NotNull(message = "Tọa độ thực tế (Vĩ độ) không được để trống")
     private Double actualLatitude;

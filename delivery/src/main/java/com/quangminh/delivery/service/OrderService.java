@@ -5,11 +5,7 @@ import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
 import com.quangminh.delivery.dto.DeliveryCompleteDTO;
 import com.quangminh.delivery.dto.OrderRequestDTO;
-import com.quangminh.delivery.entity.AuditLog;
-import com.quangminh.delivery.entity.DeliveryProof;
 import com.quangminh.delivery.entity.Order;
-import com.quangminh.delivery.repository.AuditLogRepository;
-import com.quangminh.delivery.repository.DeliveryProofRepository;
 import com.quangminh.delivery.repository.OrderRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,12 +24,6 @@ public class OrderService {
 
     @Autowired
     private OrderRepository orderRepository;
-
-    @Autowired
-    private DeliveryProofRepository proofRepository;
-
-    @Autowired
-    private AuditLogRepository auditLogRepository;
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -76,13 +66,6 @@ public class OrderService {
     }
 
     @Transactional
-    public void processCheckIn(UUID id, String driverId, double lat, double lng) {
-        Order order = getOrderById(id);
-        String logDetail = String.format("Tài xế [ID: %s] CHECK-IN tại đơn [%s]. GPS: %f, %f", driverId, order.getOrderCode(), lat, lng);
-        auditLogRepository.save(new AuditLog("CHECK_IN", driverId, logDetail));
-    }
-
-    @Transactional
     public Order updateOrderStatus(UUID id, String status) {
         Order order = getOrderById(id);
         order.setStatus(status);
@@ -99,17 +82,8 @@ public class OrderService {
         order.setCheckInTime(LocalDateTime.now());
         order.setEvidenceImage(dto.getEvidenceImage());
         order.setFailureReason(dto.getFailureReason());
-        Order savedOrder = orderRepository.save(order);
-
-        if ("SUCCESS".equalsIgnoreCase(dto.getStatus())) {
-            DeliveryProof proof = new DeliveryProof();
-            proof.setOrder(savedOrder);
-            proof.setSignatureValue(dto.getSignatureValue());
-            proof.setSignedAt(LocalDateTime.now());
-            proof.setHashValue(UUID.randomUUID().toString());
-            proofRepository.save(proof);
-        }
-        return savedOrder;
+        order.setUpdatedAt(LocalDateTime.now());
+        return orderRepository.save(order);
     }
 
     public Map<String, Object> getDashboardStats() {
@@ -174,7 +148,6 @@ public class OrderService {
             response.put("customerPhone", maskedPhone);
             response.put("deliveryAddress", order.getDeliveryAddress());
 
-            auditLogRepository.save(new AuditLog("VERIFY", "PUBLIC_USER", "Kiểm chứng PDF đơn " + orderCode));
             return response;
 
         } catch (Exception e) {
@@ -186,7 +159,6 @@ public class OrderService {
 
     public Map<String, Object> getOrderReport(UUID orderId) {
         Order order = getOrderById(orderId);
-        DeliveryProof proof = proofRepository.findByOrderId(orderId).orElse(null);
 
         Map<String, Object> report = new HashMap<>();
         report.put("orderCode", order.getOrderCode());
@@ -197,15 +169,9 @@ public class OrderService {
 
         if (order.getDriver() != null) report.put("driverName", order.getDriver().getFullName());
 
-        if (proof != null) {
-            report.put("signature", proof.getSignatureValue());
-            report.put("signedAt", proof.getSignedAt());
-            report.put("hashValue", proof.getHashValue());
-            report.put("isVerified", true);
-        } else {
-            report.put("isVerified", false);
-            report.put("message", "Chưa được ký nhận hoặc giao thất bại.");
-        }
+        report.put("isVerified", "DELIVERED".equals(order.getStatus()));
+
         return report;
     }
+
 }

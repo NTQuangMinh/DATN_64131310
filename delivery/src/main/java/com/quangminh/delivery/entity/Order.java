@@ -60,9 +60,6 @@ public class Order {
     @JoinColumn(name = "route_id")
     private Route route;
 
-    @Column(name = "delivery_sequence")
-    private Integer deliverySequence;
-
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 

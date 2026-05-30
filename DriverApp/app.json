@@ -15,7 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Ứng dụng cần vị trí để tài xế dẫn đường tới khách hàng."
+        "NSLocationWhenInUseUsageDescription": "Ứng dụng cần vị trí để xác nhận điểm giao hàng và dẫn đường tới khách hàng.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ứng dụng cần vị trí để xác nhận điểm giao hàng và dẫn đường tới khách hàng."
       }
     },
     "android": {
@@ -26,7 +27,8 @@
       "permissions": [
         "INTERNET",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
       ],
       "config": {
         "googleMaps": {
@@ -36,6 +38,16 @@
       "edgeToEdgeEnabled": true,
       "usesCleartextTraffic": true
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cho phép ứng dụng truy cập vị trí khi sử dụng để xác nhận đơn hàng.",
+          "locationAlwaysPermission": "Cho phép ứng dụng truy cập vị trí để xác nhận đơn hàng.",
+          "locationBackgroundPermission": "Cho phép ứng dụng cập nhật vị trí khi giao hàng ngay cả khi app chạy nền."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }

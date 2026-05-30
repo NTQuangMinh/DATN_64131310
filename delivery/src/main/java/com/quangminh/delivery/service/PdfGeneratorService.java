@@ -1,9 +1,8 @@
 package com.quangminh.delivery.service;
 
-// Các thư viện cho giao diện PDF và Font
+
 import com.itextpdf.io.font.PdfEncodings;
 import com.itextpdf.kernel.colors.DeviceRgb;
-import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.font.PdfFont;
 import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.kernel.pdf.PdfDocument;
@@ -13,11 +12,6 @@ import com.itextpdf.layout.element.Cell;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
-
-// Các thư viện TẠO MÃ QR (Đã được thêm vào)
-import com.itextpdf.barcodes.BarcodeQRCode;
-import com.itextpdf.kernel.pdf.xobject.PdfFormXObject;
-import com.itextpdf.layout.element.Image;
 
 import com.quangminh.delivery.entity.Order;
 import org.springframework.core.io.ClassPathResource;
@@ -84,25 +78,6 @@ public class PdfGeneratorService {
             addRow(table, "Thời gian ký:", formattedTime, labelBgColor);
 
             document.add(table);
-
-            // =================================================================
-            // CHÈN MÃ QR CODE (Sử dụng biến "pdf" thay vì "pdfDoc")
-            // =================================================================
-            String verifyUrl = "http://localhost:5173/verify"; // Đổi thành tên miền sau khi Deploy
-            BarcodeQRCode qrCode = new BarcodeQRCode(verifyUrl);
-
-            // Ép QR Code thành dạng ảnh gắn vào biến "pdf"
-            PdfFormXObject qrCodeObject = qrCode.createFormXObject(ColorConstants.BLACK, pdf);
-            Image qrImage = new Image(qrCodeObject);
-            qrImage.setWidth(100);
-            qrImage.setHeight(100);
-
-            document.add(new Paragraph("Quét mã QR dưới đây để kiểm chứng biên bản trực tuyến:")
-                    .setMarginTop(20)
-                    .setFontSize(10)
-                    .setItalic());
-            document.add(qrImage);
-            // =================================================================
 
             // Footer chờ ký DocuSign
             Paragraph footer = new Paragraph("\nChữ ký điện tử xác nhận của khách hàng\n(Ký số bảo mật an toàn qua hệ thống DocuSign PKI)")

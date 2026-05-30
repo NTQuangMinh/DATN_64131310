@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import axiosInstance from '../api/axiosInstance'; // Cập nhật đúng đường dẫn của bạn
+import axiosInstance from '../api/axiosInstance'; 
 import { 
-  Package, Eye, MapPin, X, Save, Loader2, AlertCircle, CheckCircle2 
+  Package, Eye, MapPin, X, Save, Loader2, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Search 
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -32,20 +32,20 @@ const OrderList = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // States cho Modal Thêm mới
+  // STATES CHO PHÂN TRANG & TÌM KIẾM
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize] = useState(5);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-  
-  // LỚP KHIÊN VALIDATION: State chứa lỗi
   const [errors, setErrors] = useState<{ customerName?: string; customerPhone?: string; deliveryAddress?: string; form?: string }>({});
 
-  // States cho Modal Chi tiết
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   
-  // States cho Form & Map
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -71,6 +71,27 @@ const OrderList = () => {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  const filteredOrders = orders.filter((order: any) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      order.orderCode?.toLowerCase().includes(term) ||
+      order.customerName?.toLowerCase().includes(term) ||
+      order.customerPhone?.includes(term)
+    );
+  });
+
+  const sortedOrders = [...filteredOrders].sort((a: any, b: any) => {
+    const dateA = new Date(a.createdAt || a.createdDate || 0).getTime();
+    const dateB = new Date(b.createdAt || b.createdDate || 0).getTime();
+    return dateB !== dateA ? dateB - dateA : -1;
+  });
+
+  const totalPages = Math.ceil(sortedOrders.length / pageSize);
+  const paginatedOrders = sortedOrders.slice(
+    currentPage * pageSize, 
+    (currentPage + 1) * pageSize
+  );
 
   const fetchSuggestions = useCallback(
     debounce(async (query: string) => {
@@ -116,7 +137,6 @@ const OrderList = () => {
     return <Marker position={[formData.latitude, formData.longitude]} />;
   };
 
-  // --- HÀM KIỂM TRA LỖI (VALIDATION FRONTEND) ---
   const validateForm = () => {
     let newErrors: any = {};
     let isValid = true;
@@ -126,12 +146,12 @@ const OrderList = () => {
       isValid = false;
     }
 
-    const phoneRegex = /^(0|\+84)\d{9,10}$/; // Check đầu 0 hoặc +84, tổng 10-11 số
+    const phoneRegex = /^(0|\+84)\d{9,10}$/; 
     if (!formData.customerPhone.trim()) {
       newErrors.customerPhone = 'Số điện thoại không được để trống';
       isValid = false;
     } else if (!phoneRegex.test(formData.customerPhone.trim())) {
-      newErrors.customerPhone = 'Số điện thoại không hợp lệ (Phải từ 10-11 số)';
+      newErrors.customerPhone = 'Số điện thoại không hợp lệ';
       isValid = false;
     }
 
@@ -147,25 +167,24 @@ const OrderList = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    
-    // CHẶN NGAY TẠI ĐÂY NẾU FRONTEND BÁO LỖI
     if (!validateForm()) return;
 
     setIsSubmitting(true);
     try {
       await axiosInstance.post('/orders', formData);
       setSuccessMsg("Tạo đơn hàng thành công!");
-      fetchOrders();
       
-      // Đợi 1.5s để hiện thông báo thành công rồi mới đóng Modal
+      fetchOrders();
+      setCurrentPage(0); 
+      setSearchTerm(''); 
+      
       setTimeout(() => {
         setIsModalOpen(false);
         setSuccessMsg('');
-        setFormData({ customerName: '', customerPhone: '', deliveryAddress: '', latitude: 16.0471, longitude: 108.2068 });
+        setFormData({ customerName: '', customerPhone: '', deliveryAddress: '', latitude: 12.2451, longitude: 109.1951 });
       }, 1500);
 
     } catch (err: any) {
-      // Hứng lỗi từ Backend (Lớp khiên 2)
       if (err.response?.data?.error) {
         setErrors({ form: err.response.data.error });
       } else if (err.response?.data) {
@@ -204,34 +223,39 @@ const OrderList = () => {
       case 'SUCCESS': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       case 'PENDING': return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'ASSIGNED': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'CANCELED': return 'bg-red-100 text-red-700 border-red-200';
+      case 'CANCELED': 
+      case 'FAILED': return 'bg-red-100 text-red-700 border-red-200';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Quản lý Đơn hàng</h1>
           <p className="text-slate-500 text-sm mt-1">Số hóa quy trình tiếp nhận và điều phối giao hàng</p>
         </div>
         <button 
-          onClick={() => {
-            setIsModalOpen(true);
-            setErrors({});
-            setSuccessMsg('');
-          }}
+          onClick={() => { setIsModalOpen(true); setErrors({}); setSuccessMsg(''); }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95"
         >
-          <Package size={20} />
-          Tạo đơn hàng mới
+          <Package size={20} /> Tạo đơn hàng mới
         </button>
       </div>
 
-      {/* Bảng danh sách */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 w-full max-w-md">
+         <div className="pl-3 text-slate-400"><Search size={20} /></div>
+         <input 
+            type="text" 
+            placeholder="Tìm theo mã đơn, khách hàng, SĐT..." 
+            className="w-full bg-transparent p-2 outline-none text-sm font-medium text-slate-700"
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(0); }}
+         />
+      </div>
+
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
             <thead>
@@ -253,16 +277,16 @@ const OrderList = () => {
                         </div>
                     </td>
                 </tr>
-                ) : orders.length === 0 ? (
+                ) : filteredOrders.length === 0 ? (
                 <tr>
                     <td colSpan={5} className="p-20 text-center">
                         <div className="flex flex-col items-center justify-center text-slate-400 gap-3">
                             <Package size={48} className="text-slate-200" />
-                            <p className="font-medium">Hệ thống chưa có đơn hàng nào.</p>
+                            <p className="font-medium">{searchTerm ? "Không tìm thấy kết quả." : "Chưa có đơn hàng nào."}</p>
                         </div>
                     </td>
                 </tr>
-                ) : orders.map((order: any) => (
+                ) : paginatedOrders.map((order: any) => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="p-5 font-black text-slate-700">{order.orderCode}</td>
                     <td className="p-5">
@@ -294,127 +318,64 @@ const OrderList = () => {
             </tbody>
             </table>
         </div>
-      </div>
 
-      {/* MODAL TẠO MỚI ĐƠN HÀNG */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-5xl rounded-[2rem] shadow-2xl flex flex-col md:flex-row overflow-hidden h-[85vh]">
-            
-            {/* Cột trái: Form nhập liệu */}
-            <div className="w-full md:w-2/5 p-8 flex flex-col h-full border-r border-slate-100">
-              <div className="flex justify-between items-center mb-6">
-                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">Tiếp nhận đơn mới</h2>
-                 <button onClick={() => setIsModalOpen(false)} className="md:hidden p-2 bg-slate-100 rounded-full"><X size={20}/></button>
-              </div>
-
-              {/* Thông báo Thành công hoặc Lỗi chung */}
-              {successMsg && (
-                  <div className="mb-4 bg-emerald-50 text-emerald-600 p-3.5 rounded-2xl text-sm border border-emerald-100 font-bold flex items-center gap-2">
-                      <CheckCircle2 size={18} /> {successMsg}
-                  </div>
-              )}
-              {errors.form && (
-                  <div className="mb-4 bg-red-50 text-red-600 p-3.5 rounded-2xl text-sm border border-red-100 font-bold flex items-center gap-2">
-                      <AlertCircle size={18} /> {errors.form}
-                  </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-5 pr-2 custom-scrollbar">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Tên khách hàng */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Khách hàng</label>
-                    <input 
-                      placeholder="Nguyễn Văn A"
-                      className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none transition-all text-sm font-medium ${errors.customerName ? 'border-red-400 focus:ring-4 focus:ring-red-500/10' : 'border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500'}`} 
-                      value={formData.customerName} 
-                      onChange={e => { setFormData({...formData, customerName: e.target.value}); if (errors.customerName) setErrors({...errors, customerName: ''}); }}
-                    />
-                    {errors.customerName && <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.customerName}</p>}
-                  </div>
-                  
-                  {/* Số điện thoại */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Điện thoại</label>
-                    <input 
-                      placeholder="0901234567"
-                      className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none transition-all text-sm font-medium ${errors.customerPhone ? 'border-red-400 focus:ring-4 focus:ring-red-500/10' : 'border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500'}`} 
-                      value={formData.customerPhone} 
-                      onChange={e => { setFormData({...formData, customerPhone: e.target.value}); if (errors.customerPhone) setErrors({...errors, customerPhone: ''}); }}
-                    />
-                    {errors.customerPhone && <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.customerPhone}</p>}
-                  </div>
-                </div>
-
-                {/* Địa chỉ giao hàng */}
-                <div className="space-y-1.5 relative">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex justify-between">
-                    Địa chỉ giao hàng
-                    {isSearching && <Loader2 size={14} className="animate-spin text-blue-500"/>}
-                  </label>
-                  <textarea 
-                    rows={3} placeholder="Gõ địa chỉ để tự động tìm kiếm GPS..."
-                    className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none transition-all text-sm font-medium resize-none ${errors.deliveryAddress ? 'border-red-400 focus:ring-4 focus:ring-red-500/10' : 'border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500'}`}
-                    value={formData.deliveryAddress}
-                    onChange={e => {
-                      setFormData({...formData, deliveryAddress: e.target.value});
-                      if (errors.deliveryAddress) setErrors({...errors, deliveryAddress: ''});
-                      fetchSuggestions(e.target.value);
-                    }}
-                  />
-                  {errors.deliveryAddress && <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.deliveryAddress}</p>}
-                  
-                  {/* Khung Gợi ý địa chỉ */}
-                  {showSuggestions && suggestions.length > 0 && (
-                    <div className="absolute z-[2100] w-full bg-white border border-slate-200 rounded-2xl shadow-2xl mt-1 overflow-hidden">
-                      {suggestions.map((item, index) => (
-                        <div key={index} onClick={() => handleSelectSuggestion(item)} className="p-3.5 text-xs hover:bg-blue-50 cursor-pointer border-b border-slate-50 flex items-start gap-3 transition-colors">
-                          <MapPin size={16} className="text-blue-500 mt-0.5 shrink-0"/>
-                          <span className="text-slate-700 font-medium leading-relaxed">{item.display_name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Hiển thị Tọa độ */}
-                <div className="p-5 bg-slate-900 rounded-2xl text-white shadow-inner">
-                  <div className="flex justify-between font-mono text-[11px] font-bold text-slate-300 mb-2">
-                    <span>LAT: <span className="text-white">{formData.latitude.toFixed(6)}</span></span>
-                    <span>LNG: <span className="text-white">{formData.longitude.toFixed(6)}</span></span>
-                  </div>
-                  <p className="text-[10px] text-blue-400 italic">Tọa độ GPS sẽ tự động cập nhật khi bạn chọn địa chỉ gợi ý hoặc click trực tiếp trên bản đồ.</p>
-                </div>
-              </form>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-6 border-t border-slate-100 mt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 rounded-2xl transition">Hủy bỏ</button>
-                <button 
-                  onClick={handleSubmit} 
-                  disabled={isSubmitting || !!successMsg}
-                  className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition shadow-lg shadow-blue-200 disabled:bg-blue-400"
-                >
-                  {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <Save size={20}/>} 
-                  {isSubmitting ? 'Đang lưu...' : successMsg ? 'Thành công!' : 'Lưu đơn hàng'}
-                </button>
-              </div>
-            </div>
-
-            {/* Cột phải: Bản đồ */}
-            <div className="hidden md:block w-3/5 bg-slate-100 relative">
-              <MapContainer center={[formData.latitude, formData.longitude]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <LocationPicker />
-                <RecenterMap lat={formData.latitude} lng={formData.longitude} />
-              </MapContainer>
-              <div className="absolute top-4 left-4 z-[1000] bg-white/90 backdrop-blur px-4 py-2 rounded-xl text-xs font-bold text-slate-700 shadow-sm border border-white/20">
-                 Kéo thả hoặc click bản đồ để ghim vị trí giao hàng
-              </div>
+        {filteredOrders.length > 0 && (
+          <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">
+              Trang {currentPage + 1} / {totalPages || 1} <span className="hidden sm:inline">(Tổng: {filteredOrders.length} kết quả)</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))} disabled={currentPage === 0} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50"><ChevronLeft size={18} /></button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button key={i} onClick={() => setCurrentPage(i)} className={`w-9 h-9 rounded-xl text-xs font-black transition-all border ${currentPage === i ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{i + 1}</button>
+              ))}
+              <button onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))} disabled={currentPage >= totalPages - 1} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50"><ChevronRight size={18} /></button>
             </div>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* MODAL TẠO ĐƠN */}
+      {isModalOpen && (
+         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+         <div className="bg-white w-full max-w-5xl rounded-[2rem] shadow-2xl flex flex-col md:flex-row overflow-hidden h-[85vh]">
+           <div className="w-full md:w-2/5 p-8 flex flex-col h-full border-r border-slate-100">
+             <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Tiếp nhận đơn mới</h2>
+                <button onClick={() => setIsModalOpen(false)} className="md:hidden p-2 bg-slate-100 rounded-full"><X size={20}/></button>
+             </div>
+             {successMsg && <div className="mb-4 bg-emerald-50 text-emerald-600 p-3.5 rounded-2xl text-sm border font-bold flex items-center gap-2"><CheckCircle2 size={18} /> {successMsg}</div>}
+             {errors.form && <div className="mb-4 bg-red-50 text-red-600 p-3.5 rounded-2xl text-sm border font-bold flex items-center gap-2"><AlertCircle size={18} /> {errors.form}</div>}
+             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-5 pr-2 custom-scrollbar">
+               <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Khách hàng</label><input placeholder="Nguyễn Văn A" className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium ${errors.customerName ? 'border-red-400' : 'border-slate-200'}`} value={formData.customerName} onChange={e => { setFormData({...formData, customerName: e.target.value}); if (errors.customerName) setErrors({...errors, customerName: ''}); }} />{errors.customerName && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.customerName}</p>}</div>
+                 <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Điện thoại</label><input placeholder="0901234567" className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium ${errors.customerPhone ? 'border-red-400' : 'border-slate-200'}`} value={formData.customerPhone} onChange={e => { setFormData({...formData, customerPhone: e.target.value}); if (errors.customerPhone) setErrors({...errors, customerPhone: ''}); }} />{errors.customerPhone && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.customerPhone}</p>}</div>
+               </div>
+               <div className="space-y-1.5 relative"><label className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex justify-between">Địa chỉ {isSearching && <Loader2 size={14} className="animate-spin text-blue-500"/>}</label><textarea rows={3} placeholder="Gõ địa chỉ để tìm GPS..." className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium resize-none ${errors.deliveryAddress ? 'border-red-400' : 'border-slate-200'}`} value={formData.deliveryAddress} onChange={e => { setFormData({...formData, deliveryAddress: e.target.value}); if (errors.deliveryAddress) setErrors({...errors, deliveryAddress: ''}); fetchSuggestions(e.target.value); }} />{errors.deliveryAddress && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.deliveryAddress}</p>}
+                 {showSuggestions && suggestions.length > 0 && (
+                   <div className="absolute z-[2100] w-full bg-white border border-slate-200 rounded-2xl shadow-2xl mt-1 overflow-hidden">
+                     {suggestions.map((item, index) => (
+                       <div key={index} onClick={() => handleSelectSuggestion(item)} className="p-3.5 text-xs hover:bg-blue-50 cursor-pointer border-b border-slate-50 flex items-start gap-3 transition-colors"><MapPin size={16} className="text-blue-500 mt-0.5 shrink-0"/><span className="text-slate-700 font-medium">{item.display_name}</span></div>
+                     ))}
+                   </div>
+                 )}
+               </div>
+               <div className="p-5 bg-slate-900 rounded-2xl text-white shadow-inner">
+                 <div className="flex justify-between font-mono text-[11px] font-bold text-slate-300 mb-2"><span>LAT: <span className="text-white">{formData.latitude.toFixed(6)}</span></span><span>LNG: <span className="text-white">{formData.longitude.toFixed(6)}</span></span></div>
+               </div>
+             </form>
+             <div className="flex gap-3 pt-6 border-t border-slate-100 mt-4">
+               <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 rounded-2xl transition">Hủy bỏ</button>
+               <button onClick={handleSubmit} disabled={isSubmitting || !!successMsg} className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition"><Save size={20}/> Lưu đơn hàng</button>
+             </div>
+           </div>
+           <div className="hidden md:block w-3/5 bg-slate-100 relative">
+             <MapContainer center={[formData.latitude, formData.longitude]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" /><LocationPicker /><RecenterMap lat={formData.latitude} lng={formData.longitude} />
+             </MapContainer>
+           </div>
+         </div>
+       </div>
       )}
 
       {/* MODAL XEM CHI TIẾT ĐƠN HÀNG */}
@@ -456,9 +417,44 @@ const OrderList = () => {
                   {activeOrder.latitude?.toFixed(5)}, {activeOrder.longitude?.toFixed(5)}
                 </span>
               </div>
+
+              {/* 🌟 KHỐI HIỂN THỊ LÝ DO HỦY/THẤT BẠI */}
+              {(activeOrder.status === 'CANCELED' || activeOrder.status === 'FAILED') && (
+                 <div className="col-span-2 bg-red-50 p-4 rounded-2xl border border-red-100 animate-in fade-in zoom-in duration-300">
+                    <span className="text-[10px] text-red-500 font-black uppercase tracking-wider block mb-1 flex items-center gap-1.5">
+                       <AlertCircle size={14} /> Lý do không hoàn thành
+                    </span>
+                    <span className="text-red-700 font-bold text-sm leading-relaxed">
+                      {activeOrder.failureReason || activeOrder.cancelReason || activeOrder.note || "Tài xế không để lại lý do cụ thể."}
+                    </span>
+                 </div>
+              )}
+
+              {/* 🌟 KHỐI HIỂN THỊ THÔNG TIN TIẾN TRÌNH GIAO HÀNG 🌟 */}
+              {activeOrder.status === 'DELIVERED' && (
+                <div className="col-span-2 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 animate-in fade-in zoom-in duration-300">
+                  <span className="text-[10px] text-emerald-600 font-black uppercase tracking-wider block mb-3 flex items-center gap-1.5">
+                    <CheckCircle2 size={14} /> TIẾN TRÌNH BÀN GIAO THỰC TẾ
+                  </span>
+                  <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
+                    {/* Sửa activeOrder.driverName thành activeOrder.driver?.fullName */}
+                    <p><strong>Tài xế phụ trách:</strong> {activeOrder.driver?.fullName || 'Chưa cập nhật'}</p>
+                    
+                    <p>
+                      <strong>Đến nơi (Check-in):</strong>{' '}
+                      {/* Sửa checkinTime thành checkInTime (chữ I viết hoa) */}
+                      {activeOrder.checkInTime ? new Date(activeOrder.checkInTime).toLocaleString('vi-VN') : 'Không có dữ liệu'}
+                    </p>
+                    
+                    <p className="col-span-2 text-emerald-800 p-2.5 bg-white rounded-xl border border-emerald-200 shadow-sm mt-1">
+                      <strong>Hoàn tất (Ký nhận):</strong>{' '}
+                      {activeOrder.updatedAt ? new Date(activeOrder.updatedAt).toLocaleString('vi-VN') : 'Không có dữ liệu'}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Khối hiển thị ảnh minh chứng */}
             <div className="space-y-3">
               <span className="text-sm text-slate-800 font-black block">Ảnh minh chứng giao hàng</span>
               
@@ -478,7 +474,6 @@ const OrderList = () => {
               )}
             </div>
 
-            {/* Nút xem PDF Ký số */}
             {activeOrder.status === 'DELIVERED' && (
               <div className="pt-2">
                 <button

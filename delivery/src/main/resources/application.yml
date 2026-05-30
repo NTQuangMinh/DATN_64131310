@@ -17,8 +17,8 @@ spring:
         serialization:
             fail-on-empty-beans: false
 docusign:
-    integration-key: "5265a455-9692-46b5-aa1a-e032f87acebf"
-    user-id: "9db850ab-85d2-4ada-8426-0cfdd9fea1a6"
-    account-id: "4c95ce8c-6722-44f9-b5f7-adcd9dc1a13e"
+    integration-key: "cb18bc38-1aab-42e7-8240-3a2ec642db0d"
+    user-id: "1ba00d72-307f-4489-bf00-0f8a1442d19e"
+    account-id: "026b36e4-fbe5-4f4b-bedb-c761f84161ec"
     private-key-path: "private.key"
     auth-server: "account-d.docusign.com"

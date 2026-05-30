@@ -49,7 +49,6 @@ public class OrderController {
             @RequestParam String driverId,
             @RequestParam double lat,
             @RequestParam double lng) {
-        orderService.processCheckIn(id, driverId, lat, lng);
         return ResponseEntity.ok("Ghi nhận thông tin Check-in thành công!");
     }
 

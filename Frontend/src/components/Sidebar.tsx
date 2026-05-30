@@ -3,7 +3,6 @@ import {
   LayoutDashboard, 
   Package, 
   MapPin, 
-  ShieldCheck, 
   LogOut,
   Truck
 } from 'lucide-react';
@@ -14,11 +13,10 @@ const Sidebar = () => {
 
   const menuItems = [
     { icon: <LayoutDashboard size={20}/>, label: 'Dashboard', path: '/dashboard' },
+    { icon: <Package size={20}/>, label: 'Quản lý tài xế', path: '/users/drivers' },
     { icon: <Package size={20}/>, label: 'Đơn hàng', path: '/orders' },
     { icon: <MapPin size={20}/>, label: 'Lập tuyến', path: '/routes' },
-    { icon: <Truck size={20}/>, label: 'Nhiệm vụ giao hàng', path: '/drivertasks' },
-    // Sửa đường dẫn cho khớp với App.tsx
-    { icon: <ShieldCheck size={20}/>, label: 'Xác minh ký số', path: '/verify' },
+    { icon: <Truck size={20}/>, label: 'Theo dõi tài xế', path: '/drivertracking' },
   ];
 
   const handleLogout = () => {

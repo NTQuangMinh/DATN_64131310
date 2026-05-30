@@ -60,7 +60,6 @@ public class RouteService {
             // Cập nhật thông tin phân công vào Đơn hàng
             order.setStatus("ASSIGNED");
             order.setDriver(driver);
-            order.setDeliverySequence(i + 1);
             orderRepository.save(order);
         }
 

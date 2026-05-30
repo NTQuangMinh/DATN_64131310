@@ -57,9 +57,12 @@ public class SecurityConfig {
                                 .requestMatchers("/api/orders/*/check-in").hasAnyRole("ADMIN", "DRIVER")
                                 .requestMatchers("/api/orders/*/receipt").hasAnyRole("ADMIN")
                                 .requestMatchers("/api/orders/*/report").hasAnyRole("ADMIN", "DRIVER")
+                                .requestMatchers("/users/location").hasAnyRole("ADMIN", "DRIVER")
                                 .requestMatchers("/api/orders/verify-pdf").permitAll()
 
                                 .requestMatchers("/api/orders/**").hasRole("ADMIN")
+                                .requestMatchers("/api/tracking-logs").hasRole("ADMIN")
+                                .requestMatchers("/api/users", "/api/users/**").hasAnyRole("ADMIN", "DRIVER")
                                 .requestMatchers("/api/routes/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
