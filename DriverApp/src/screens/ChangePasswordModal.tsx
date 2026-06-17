@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     padding: 14, 
     marginBottom: 12, 
     fontSize: 15,
-    color: '#0f172a' // 🌟 FIX CHÍ MẠNG: Ép chữ phải luôn là màu tối
+    color: '#0f172a' 
   },
   submitBtn: { backgroundColor: '#2563eb', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   submitText: { color: '#fff', fontWeight: 'bold' }

@@ -4,7 +4,6 @@ import RouteCreate from './pages/RouteCreate';
 import Login from './pages/Login';
 import OrderList from './pages/OrderList';
 import DriverManagement from './pages/DriverManagement';
-import DriverTracking from './pages/DriverTracking';
 import Sidebar from './components/Sidebar';
 
 
@@ -36,7 +35,6 @@ function App() {
                     <Route path="/users/drivers" element={<DriverManagement />} />
                     <Route path="/orders" element={<OrderList />} />
                     <Route path="/routes" element={<RouteCreate/>} />
-                    <Route path="/drivertracking" element={<DriverTracking />} />
                     {/* Nếu vào đường dẫn lạ, tự động về Dashboard */}
                     <Route path="*" element={<Navigate to="/dashboard" />} />
                   </Routes>

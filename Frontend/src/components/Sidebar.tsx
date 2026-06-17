@@ -16,7 +16,6 @@ const Sidebar = () => {
     { icon: <Package size={20}/>, label: 'Quản lý tài xế', path: '/users/drivers' },
     { icon: <Package size={20}/>, label: 'Đơn hàng', path: '/orders' },
     { icon: <MapPin size={20}/>, label: 'Lập tuyến', path: '/routes' },
-    { icon: <Truck size={20}/>, label: 'Theo dõi tài xế', path: '/drivertracking' },
   ];
 
   const handleLogout = () => {

@@ -19,11 +19,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     // Sửa hàm cũ từ tìm 1 trạng thái thành tìm danh sách trạng thái thuộc ASSIGNED hoặc DELIVERING
     List<Order> findByDriverIdAndStatusIn(UUID driverId, List<String> statuses);
 
-    // 3. Lấy tất cả đơn hàng thuộc về một tuyến đường cụ thể (Tuần 5)
     List<Order> findByRouteId(UUID routeId);
 
 
-    // 4. Tìm các đơn hàng đã hoàn thành để phục vụ đối soát và Verify (Tuần 10)
     List<Order> findByStatus(String status);
 
     long countByStatus(String status);

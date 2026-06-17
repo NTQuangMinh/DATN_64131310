@@ -48,9 +48,6 @@ export default function DeliveryConfirm() {
       let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const userId = await AsyncStorage.getItem('userId') || "UNKNOWN_DRIVER";
       
-      // 2. Gọi API nạp Audit Log lên Server Spring Boot
-      await axiosInstance.post(`/orders/${orderId}/check-in?driverId=${userId}&lat=${loc.coords.latitude}&lng=${loc.coords.longitude}`);
-      
       Alert.alert("Thành công", "Hệ thống đã ghi nhận thời gian và vị trí Check-in của bạn. Mở khóa Camera minh chứng!");
       setHasCheckedIn(true); // Kích hoạt mở khóa màn hình chụp ảnh
     } catch (error) {

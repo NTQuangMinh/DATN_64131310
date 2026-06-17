@@ -112,7 +112,7 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
   const handleCheckin = async (orderId: string) => {
     try {
       setLoading(true);
-      await axiosInstance.put(`/orders/${orderId}/checkin`);
+      
       Alert.alert("Thành công", "Đã ghi nhận có mặt tại điểm giao! Vui lòng cho khách hàng kiểm tra và ký nhận.");
       fetchOrders(); 
     } catch (error) {
@@ -340,22 +340,21 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
                   </View>
 
                   {/* 🌟 ĐÃ CẬP NHẬT GIAO DIỆN NÚT 3 BƯỚC: Đi giao -> Đến nơi -> Ký nhận */}
+                  {/* Khu vực 3: Nút hành động chính (Bên phải Card) */}
                   <View style={styles.mainActionContainer}>
-                    {item.status === 'ASSIGNED' && (
-                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#007AFF' }]} onPress={() => handleStartDelivery(item.id)}>
+                    {item.status === 'ASSIGNED' ? (
+                      <TouchableOpacity 
+                        style={[styles.actionBtn, { backgroundColor: '#007AFF' }]} 
+                        onPress={() => handleStartDelivery(item.id)}
+                      >
                         <Text style={styles.btnText}>Đi giao</Text>
                       </TouchableOpacity>
-                    )}
-
-                    {item.status === 'DELIVERING' && (
-                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FF9500' }]} onPress={() => handleCheckin(item.id)}>
-                        <Text style={styles.btnText}>Đến nơi</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {item.status === 'ARRIVED' && (
-                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#34C759' }]} onPress={() => (navigation as any).navigate('DeliveryConfirm', { orderId: item.id })}>
-                        <Text style={styles.btnText}>Ký nhận</Text>
+                    ) : (
+                      <TouchableOpacity 
+                        style={[styles.actionBtn, { backgroundColor: '#34C759' }]} 
+                        onPress={() => (navigation as any).navigate('DeliveryConfirm', { orderId: item.id })}
+                      >
+                        <Text style={styles.btnText}>Xác nhận</Text>
                       </TouchableOpacity>
                     )}
                   </View>
