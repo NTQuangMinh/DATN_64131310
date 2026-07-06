@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axiosInstance from '../api/axiosInstance'; // Trỏ đúng đường dẫn của bạn
+import axiosInstance from '../api/axiosInstance';
 
 export const useLocationTracking = () => {
   useEffect(() => {
@@ -17,7 +17,6 @@ export const useLocationTracking = () => {
         }
 
         // 2. Lấy ID tài xế đang đăng nhập (Lưu lúc Login)
-        // Lưu ý: Đổi 'userId' thành đúng key bạn đang dùng trong AsyncStorage
         const driverId = await AsyncStorage.getItem('userId');
         if (!driverId) return;
 
@@ -34,7 +33,6 @@ export const useLocationTracking = () => {
             const { latitude, longitude } = location.coords;
             
             try {
-              // 4. Gửi DTO lên Backend
               await axiosInstance.post('/users/location', {
                 driverId: driverId,
                 latitude: latitude,
@@ -60,5 +58,5 @@ export const useLocationTracking = () => {
         locationSubscription.remove();
       }
     };
-  }, []); // [] đảm bảo chỉ chạy 1 lần khi mount
+  }, []);
 };

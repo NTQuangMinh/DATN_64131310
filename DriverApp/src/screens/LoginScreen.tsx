@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
-import { Ionicons } from '@expo/vector-icons'; // Đảm bảo bạn đã cài @expo/vector-icons
+import { Ionicons } from '@expo/vector-icons';
 
 interface LoginProps {
   onLoginSuccess: (token: string) => void;

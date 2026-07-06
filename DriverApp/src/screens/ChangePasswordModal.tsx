@@ -28,7 +28,7 @@ const ChangePasswordModal: React.FC<ChangePasswordProps> = ({ visible, onClose }
     setLoading(true);
     try {
       const userId = await AsyncStorage.getItem('userId');
-      // Gọi API đổi mật khẩu (Sẽ cấu hình ở Bước 3)
+
       await axiosInstance.put(`/users/${userId}/change-password`, {
         oldPassword,
         newPassword

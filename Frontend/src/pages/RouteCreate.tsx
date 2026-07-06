@@ -4,13 +4,10 @@ import {
   CheckCircle2, AlertCircle, 
   Loader2, User, Check, Route as RouteIcon
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMap, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 import L from 'leaflet';
-import 'leaflet-routing-machine';
 
-// 🌟 1. TẠO ICON TÀI XẾ (Hình tròn xanh có emoji xe tải)
 const DriverIcon = L.divIcon({
     className: 'custom-driver-icon',
     html: `
@@ -22,7 +19,6 @@ const DriverIcon = L.divIcon({
     iconAnchor: [16, 16],
 });
 
-// 🌟 2. TẠO ICON ĐƠN HÀNG (Hình tròn cam có emoji hộp hàng)
 const OrderIcon = L.divIcon({
     className: 'custom-order-icon',
     html: `
@@ -34,9 +30,8 @@ const OrderIcon = L.divIcon({
     iconAnchor: [12, 12],
 });
 
-// --- THUẬT TOÁN HAVERSINE TÍNH KHOẢNG CÁCH GIỮA 2 TỌA ĐỘ (KM) ---
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371; // Bán kính Trái Đất (km)
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -46,31 +41,39 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 };
 
-// --- COMPONENT VẼ ĐƯỜNG ĐI (ROUTING) ---
-const RoutingControl = ({ waypoints }: { waypoints: L.LatLng[] }) => {
-  const map = useMap();
+const CustomPolyline = ({ waypoints }: { waypoints: L.LatLng[] }) => {
+    const map = useMap();
+    const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
 
-  useEffect(() => {
-    if (!map || waypoints.length < 2) return;
+    useEffect(() => {
+        if (waypoints.length < 2) {
+            setRouteCoords([]);
+            return;
+        }
 
-    const routingControl = (L as any).Routing.control({
-      waypoints: waypoints,
-      lineOptions: {
-        styles: [{ color: '#3b82f6', weight: 6, opacity: 0.8 }] 
-      },
-      addWaypoints: false,
-      draggableWaypoints: false,
-      fitSelectedRoutes: true, 
-      show: false, 
-      createMarker: () => null, 
-    }).addTo(map);
+        const fetchRoute = async () => {
+            const coordinateString = waypoints.map(wp => `${wp.lng},${wp.lat}`).join(';');
+            try {
+                const url = `https://router.project-osrm.org/trip/v1/driving/${coordinateString}?overview=full&geometries=geojson&source=first&destination=any`;
+                const response = await fetch(url);
+                const data = await response.json();
 
-    return () => {
-      if (map && routingControl) map.removeControl(routingControl);
-    };
-  }, [map, waypoints]);
+                if (data.trips && data.trips.length > 0) {
+                    const coords = data.trips[0].geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]]);
+                    setRouteCoords(coords);
+                    map.fitBounds(L.polyline(coords).getBounds(), { padding: [50, 50] });
+                }
+            } catch (error) {
+                console.error("Lỗi khi lấy dữ liệu OSRM:", error);
+            }
+        };
 
-  return null;
+        fetchRoute();
+    }, [waypoints, map]);
+
+    if (routeCoords.length === 0) return null;
+
+    return <Polyline positions={routeCoords} color="#3b82f6" weight={6} opacity={0.8} />;
 };
 
 const RouteCreate = () => {
@@ -85,7 +88,7 @@ const RouteCreate = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Lấy dữ liệu tài xế theo thời gian thực (Giống trang Driver Tracking)
+
   const fetchDrivers = async () => {
     try {
       const driversRes = await axiosInstance.get('/users?size=100');
@@ -95,16 +98,19 @@ const RouteCreate = () => {
     }
   };
 
+  const fetchOrders = async () => {
+    try {
+      const ordersRes = await axiosInstance.get('/orders');
+      setOrders(ordersRes.data.filter((o: any) => o.status === 'PENDING'));
+    } catch (error) {
+      console.error("Lỗi tải đơn hàng", error);
+    }
+  }
+
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [ordersRes, driversRes] = await Promise.all([
-          axiosInstance.get('/orders'),
-          axiosInstance.get('/users?size=100') 
-        ]);
-        
-        setOrders(ordersRes.data.filter((o: any) => o.status === 'PENDING'));
-        setDrivers(driversRes.data.content || driversRes.data);
+        await Promise.all([fetchOrders(), fetchDrivers()]);
       } catch (err) {
         console.error("Lỗi tải dữ liệu", err);
       } finally {
@@ -114,12 +120,10 @@ const RouteCreate = () => {
 
     loadInitialData();
 
-    // 🌟 Cập nhật vị trí tài xế mỗi 5 giây
     const interval = setInterval(fetchDrivers, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // 🌟 LOGIC: CHỌN ĐƠN VÀ TỰ ĐỘNG GỢI Ý TÀI XẾ GẦN NHẤT
   const toggleOrder = (id: string) => {
     setErrorMsg(''); 
     
@@ -127,7 +131,6 @@ const RouteCreate = () => {
       const isAdding = !prev.includes(id);
       const newSelected = isAdding ? [...prev, id] : prev.filter(item => item !== id);
 
-      // Nếu VỪA CHỌN đơn hàng ĐẦU TIÊN và CHƯA CÓ tài xế nào được chọn
       if (isAdding && newSelected.length === 1 && !selectedDriver) {
         const order = orders.find(o => o.id === id);
         if (order && order.latitude && order.longitude) {
@@ -144,16 +147,14 @@ const RouteCreate = () => {
             }
           });
 
-          // Tự động gán tài xế gần nhất
           if (closestDriverId) {
             setSelectedDriver(closestDriverId);
             setSuccessMsg(`Đã tự động chọn tài xế gần nhất (Cách ${minDistance.toFixed(1)} km)`);
-            setTimeout(() => setSuccessMsg(''), 3000); // Ẩn thông báo sau 3s
+            setTimeout(() => setSuccessMsg(''), 3000);
           }
         }
       }
 
-      // Nếu bỏ chọn hết đơn hàng -> Xóa luôn tài xế đã chọn
       if (newSelected.length === 0) {
         setSelectedDriver('');
       }
@@ -163,15 +164,23 @@ const RouteCreate = () => {
   };
 
   const getWaypoints = () => {
-    return selectedOrderIds
-      .map(id => {
+    const points: L.LatLng[] = [];
+    
+    if (selectedDriver) {
+        const driver = drivers.find(d => d.id === selectedDriver);
+        if (driver && driver.latitude && driver.longitude) {
+            points.push(L.latLng(driver.latitude, driver.longitude));
+        }
+    }
+
+    selectedOrderIds.forEach(id => {
         const order = orders.find(o => o.id === id);
         if (order && order.latitude && order.longitude) {
-          return L.latLng(order.latitude, order.longitude);
+            points.push(L.latLng(order.latitude, order.longitude));
         }
-        return null;
-      })
-      .filter(p => p !== null) as L.LatLng[];
+    });
+
+    return points;
   };
 
   const handleCreate = async () => {
@@ -191,17 +200,25 @@ const RouteCreate = () => {
         driverId: selectedDriver,
         orderIds: selectedOrderIds
       });
+      
       setSuccessMsg("Lập tuyến và giao việc thành công!");
+      
+      // 🌟 Thay đổi logic: Không chuyển trang, reset form và load lại đơn hàng
+      setSelectedDriver('');
+      setSelectedOrderIds([]);
+      await fetchOrders(); // Lấy lại danh sách đơn hàng (các đơn vừa giao sẽ biến mất khỏi mục PENDING)
+      
       setTimeout(() => {
-        window.location.href = '/dashboard'; 
-      }, 1500);
+        setSuccessMsg(''); // Ẩn thông báo thành công sau 2 giây
+      }, 2000);
+
     } catch (err) {
       setErrorMsg("Có lỗi xảy ra khi giao việc. Vui lòng thử lại!");
-      setIsSubmitting(false);
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
-  // 🌟 LOGIC: SẮP XẾP DANH SÁCH TÀI XẾ THEO KHOẢNG CÁCH (Gần đơn hàng nhất lên đầu)
   const sortedDrivers = [...drivers].sort((a, b) => {
     if (selectedOrderIds.length === 0) return 0;
     const refOrder = orders.find(o => o.id === selectedOrderIds[0]);
@@ -261,7 +278,6 @@ const RouteCreate = () => {
                 <option value="">-- Click chọn đơn để hệ thống gợi ý tài xế --</option>
                 {sortedDrivers.map((d: any) => {
                   let distanceText = "";
-                  // Tính toán để hiển thị khoảng cách kế bên tên tài xế
                   if (selectedOrderIds.length > 0) {
                     const refOrder = orders.find(o => o.id === selectedOrderIds[0]);
                     if (refOrder && d.latitude && d.longitude) {
@@ -380,11 +396,9 @@ const RouteCreate = () => {
                 )
             ))}
 
-            {/* VẼ LỘ TRÌNH KẾT NỐI CÁC ĐƠN ĐƯỢC CHỌN */}
-            <RoutingControl waypoints={getWaypoints()} />
+            <CustomPolyline waypoints={getWaypoints()} />
           </MapContainer>
           
-          {/* CHÚ GIẢI BẢN ĐỒ */}
           <div className="absolute top-6 right-6 z-[1000] bg-white/90 backdrop-blur-md px-5 py-3 rounded-2xl shadow-xl border border-white/50 flex flex-col gap-2">
              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Chú giải bản đồ</span>
              <span className="flex items-center gap-2 text-xs font-bold text-slate-700">📍 <span className="text-blue-600">Tài xế đang online</span></span>

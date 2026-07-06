@@ -47,7 +47,6 @@ public class DocuSignService {
     }
 
     private String getAccessToken() throws Exception {
-        // --- SỬ DỤNG BOUNCY CASTLE ĐỂ ĐỌC PKCS#1 (RSA PRIVATE KEY) ---
         PrivateKey privateKey;
         try (PEMParser pemParser = new PEMParser(new InputStreamReader(new ClassPathResource("private.key").getInputStream()))) {
             Object object = pemParser.readObject();
@@ -105,10 +104,6 @@ public class DocuSignService {
 
         Map<String, Object> signer = new HashMap<>();
 
-        // ========================================================
-        // SỬA TẠI ĐÂY: Chuyển thông tin người ký thành Khách Hàng
-        // Tạo một email ảo duy nhất dựa trên mã đơn hàng để DocuSign không bị nhầm lẫn
-        // ========================================================
         signer.put("email", "khach_" + order.getOrderCode() + "@delivery.local");
         signer.put("name", order.getCustomerName()); // Lấy tên Khách hàng
         signer.put("recipientId", "1");
@@ -143,9 +138,6 @@ public class DocuSignService {
         Map<String, String> body = new HashMap<>();
         body.put("authenticationMethod", "none");
 
-        // ========================================================
-        // SỬA TẠI ĐÂY: Thông tin này PHẢI KHỚP TUYỆT ĐỐI với thông tin ở createEnvelope
-        // ========================================================
         body.put("email", "khach_" + order.getOrderCode() + "@delivery.local");
         body.put("userName", order.getCustomerName());
         body.put("clientUserId", order.getId().toString());

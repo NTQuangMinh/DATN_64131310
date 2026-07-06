@@ -14,12 +14,6 @@ public class OrderCompletionService {
     @Autowired
     private DocuSignService docuSignService; // Thay thế SignatureService cũ
 
-    /**
-     * Quy trình chuẩn bị để ký số DocuSign:
-     * 1. Tạo file PDF thô từ dữ liệu đơn hàng (Chứa thông tin giao hàng)
-     * 2. Gửi PDF này lên DocuSign để tạo Envelope (Phong bì điện tử)
-     * 3. Trả về link (URL) để tài xế có thể mở trên App Mobile để ký
-     */
     public String initiateOrderSigning(Order order) {
         String unsignedPdfPath = null;
         try {
@@ -31,8 +25,6 @@ public class OrderCompletionService {
             // Đây là bước "ký số PKI" thực sự thông qua bên thứ 3 (DocuSign)
             String signingUrl = docuSignService.getEmbeddedSigningUrl(order, unsignedPdfPath);
 
-            // Bước 3: Xóa file thô sau khi đã tải lên DocuSign để bảo mật và tiết kiệm bộ nhớ
-            // DocuSign đã giữ một bản sao của file này trên Cloud của họ để chờ ký
             File unsignedFile = new File(unsignedPdfPath);
             if (unsignedFile.exists()) {
                 unsignedFile.delete();

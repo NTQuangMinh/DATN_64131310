@@ -8,7 +8,6 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import debounce from 'lodash.debounce';
 
-// --- Cấu hình Leaflet Icon ---
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
@@ -32,7 +31,6 @@ const OrderList = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // STATES CHO PHÂN TRANG & TÌM KIẾM
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize] = useState(5);
@@ -49,6 +47,10 @@ const OrderList = () => {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // 🌟 Biến cờ này dùng để hiển thị vòng xoay loading lúc đang tìm địa chỉ từ GPS
+  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
+
   const [formData, setFormData] = useState({
     customerName: '',
     customerPhone: '',
@@ -93,6 +95,7 @@ const OrderList = () => {
     (currentPage + 1) * pageSize
   );
 
+  // Hàm Geocoding (Gõ Text -> Tìm GPS)
   const fetchSuggestions = useCallback(
     debounce(async (query: string) => {
       if (query.length < 3) {
@@ -116,6 +119,29 @@ const OrderList = () => {
     []
   );
 
+  // 🌟 Hàm Reverse Geocoding (Click Bản đồ [GPS] -> Ra Text)
+  const fetchAddressFromCoordinates = async (lat: number, lon: number) => {
+    setIsReverseGeocoding(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`
+      );
+      const data = await response.json();
+      
+      if (data && data.display_name) {
+        setFormData(prev => ({ 
+            ...prev, 
+            deliveryAddress: data.display_name 
+        }));
+        if (errors.deliveryAddress) setErrors({ ...errors, deliveryAddress: '' });
+      }
+    } catch (error) {
+      console.error("Lỗi khi tìm địa chỉ từ tọa độ:", error);
+    } finally {
+        setIsReverseGeocoding(false);
+    }
+  };
+
   const handleSelectSuggestion = (item: any) => {
     setFormData({
       ...formData,
@@ -128,10 +154,13 @@ const OrderList = () => {
     if (errors.deliveryAddress) setErrors({ ...errors, deliveryAddress: '' });
   };
 
+  // Bắt sự kiện Click vào bản đồ
   const LocationPicker = () => {
     useMapEvents({
       click(e) {
         setFormData(prev => ({ ...prev, latitude: e.latlng.lat, longitude: e.latlng.lng }));
+        // 🌟 Gọi hàm tìm text địa chỉ tương ứng với tọa độ vừa click
+        fetchAddressFromCoordinates(e.latlng.lat, e.latlng.lng);
       },
     });
     return <Marker position={[formData.latitude, formData.longitude]} />;
@@ -346,12 +375,29 @@ const OrderList = () => {
              </div>
              {successMsg && <div className="mb-4 bg-emerald-50 text-emerald-600 p-3.5 rounded-2xl text-sm border font-bold flex items-center gap-2"><CheckCircle2 size={18} /> {successMsg}</div>}
              {errors.form && <div className="mb-4 bg-red-50 text-red-600 p-3.5 rounded-2xl text-sm border font-bold flex items-center gap-2"><AlertCircle size={18} /> {errors.form}</div>}
+             
              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-5 pr-2 custom-scrollbar">
                <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Khách hàng</label><input placeholder="Nguyễn Văn A" className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium ${errors.customerName ? 'border-red-400' : 'border-slate-200'}`} value={formData.customerName} onChange={e => { setFormData({...formData, customerName: e.target.value}); if (errors.customerName) setErrors({...errors, customerName: ''}); }} />{errors.customerName && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.customerName}</p>}</div>
                  <div className="space-y-1.5"><label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Điện thoại</label><input placeholder="0901234567" className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium ${errors.customerPhone ? 'border-red-400' : 'border-slate-200'}`} value={formData.customerPhone} onChange={e => { setFormData({...formData, customerPhone: e.target.value}); if (errors.customerPhone) setErrors({...errors, customerPhone: ''}); }} />{errors.customerPhone && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.customerPhone}</p>}</div>
                </div>
-               <div className="space-y-1.5 relative"><label className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex justify-between">Địa chỉ {isSearching && <Loader2 size={14} className="animate-spin text-blue-500"/>}</label><textarea rows={3} placeholder="Gõ địa chỉ để tìm GPS..." className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium resize-none ${errors.deliveryAddress ? 'border-red-400' : 'border-slate-200'}`} value={formData.deliveryAddress} onChange={e => { setFormData({...formData, deliveryAddress: e.target.value}); if (errors.deliveryAddress) setErrors({...errors, deliveryAddress: ''}); fetchSuggestions(e.target.value); }} />{errors.deliveryAddress && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.deliveryAddress}</p>}
+               
+               <div className="space-y-1.5 relative">
+                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex justify-between">
+                     Địa chỉ {(isSearching || isReverseGeocoding) && <Loader2 size={14} className="animate-spin text-blue-500"/>}
+                 </label>
+                 <textarea 
+                    rows={3} 
+                    placeholder="Gõ địa chỉ hoặc click chọn trên bản đồ..." 
+                    className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none text-sm font-medium resize-none ${errors.deliveryAddress ? 'border-red-400' : 'border-slate-200'}`} 
+                    value={formData.deliveryAddress} 
+                    onChange={e => { 
+                        setFormData({...formData, deliveryAddress: e.target.value}); 
+                        if (errors.deliveryAddress) setErrors({...errors, deliveryAddress: ''}); 
+                        fetchSuggestions(e.target.value); 
+                    }} 
+                 />
+                 {errors.deliveryAddress && <p className="text-red-500 text-[10px] font-bold ml-1">{errors.deliveryAddress}</p>}
                  {showSuggestions && suggestions.length > 0 && (
                    <div className="absolute z-[2100] w-full bg-white border border-slate-200 rounded-2xl shadow-2xl mt-1 overflow-hidden">
                      {suggestions.map((item, index) => (
@@ -360,15 +406,18 @@ const OrderList = () => {
                    </div>
                  )}
                </div>
+               
                <div className="p-5 bg-slate-900 rounded-2xl text-white shadow-inner">
                  <div className="flex justify-between font-mono text-[11px] font-bold text-slate-300 mb-2"><span>LAT: <span className="text-white">{formData.latitude.toFixed(6)}</span></span><span>LNG: <span className="text-white">{formData.longitude.toFixed(6)}</span></span></div>
                </div>
              </form>
+
              <div className="flex gap-3 pt-6 border-t border-slate-100 mt-4">
                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 rounded-2xl transition">Hủy bỏ</button>
                <button onClick={handleSubmit} disabled={isSubmitting || !!successMsg} className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition"><Save size={20}/> Lưu đơn hàng</button>
              </div>
            </div>
+           
            <div className="hidden md:block w-3/5 bg-slate-100 relative">
              <MapContainer center={[formData.latitude, formData.longitude]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" /><LocationPicker /><RecenterMap lat={formData.latitude} lng={formData.longitude} />
@@ -418,7 +467,6 @@ const OrderList = () => {
                 </span>
               </div>
 
-              {/* 🌟 KHỐI HIỂN THỊ LÝ DO HỦY/THẤT BẠI */}
               {(activeOrder.status === 'CANCELED' || activeOrder.status === 'FAILED') && (
                  <div className="col-span-2 bg-red-50 p-4 rounded-2xl border border-red-100 animate-in fade-in zoom-in duration-300">
                     <span className="text-[10px] text-red-500 font-black uppercase tracking-wider block mb-1 flex items-center gap-1.5">
@@ -430,19 +478,16 @@ const OrderList = () => {
                  </div>
               )}
 
-              {/* 🌟 KHỐI HIỂN THỊ THÔNG TIN TIẾN TRÌNH GIAO HÀNG 🌟 */}
               {activeOrder.status === 'DELIVERED' && (
                 <div className="col-span-2 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 animate-in fade-in zoom-in duration-300">
                   <span className="text-[10px] text-emerald-600 font-black uppercase tracking-wider block mb-3 flex items-center gap-1.5">
                     <CheckCircle2 size={14} /> TIẾN TRÌNH BÀN GIAO THỰC TẾ
                   </span>
                   <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
-                    {/* Sửa activeOrder.driverName thành activeOrder.driver?.fullName */}
                     <p><strong>Tài xế phụ trách:</strong> {activeOrder.driver?.fullName || 'Chưa cập nhật'}</p>
                     
                     <p>
                       <strong>Đến nơi (Check-in):</strong>{' '}
-                      {/* Sửa checkinTime thành checkInTime (chữ I viết hoa) */}
                       {activeOrder.checkInTime ? new Date(activeOrder.checkInTime).toLocaleString('vi-VN') : 'Không có dữ liệu'}
                     </p>
                     

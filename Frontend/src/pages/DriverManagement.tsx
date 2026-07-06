@@ -1,25 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../api/axiosInstance';
 import { 
-  Users, Plus, Edit, Trash2, Loader2, Save, X, Search, AlertCircle, CheckCircle2 
+  Users, Plus, Edit, Trash2, Loader2, Save, X, Search, AlertCircle, CheckCircle2, Eye, Package 
 } from 'lucide-react';
 
 const DriverManagement: React.FC = () => {
   const [drivers, setDrivers] = useState<any[]>([]);
+  const [allOrders, setAllOrders] = useState<any[]>([]); // 🌟 Lưu toàn bộ đơn hàng
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // States cho Modal
+  // States cho Modal Thêm/Sửa
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
   
+  // 🌟 States cho Modal Xem Đơn Hàng của Tài Xế
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [selectedDriverForOrders, setSelectedDriverForOrders] = useState<any>(null);
+  const [driverOrders, setDriverOrders] = useState<any[]>([]);
+
   // Validation & Messages
   const [errors, setErrors] = useState<{ username?: string; fullName?: string; phone?: string; email?: string }>({});
   const [successMsg, setSuccessMsg] = useState('');
 
-  // 🌟 State đã được bổ sung username và đổi customerPhone thành phone
   const [formData, setFormData] = useState({
     username: '',
     fullName: '',
@@ -27,22 +32,26 @@ const DriverManagement: React.FC = () => {
     email: ''
   });
 
-  const fetchDrivers = async () => {
+  const fetchData = async () => {
     try {
-      const res = await axiosInstance.get('/users');
-      setDrivers(res.data);
+      // 🌟 Fetch song song cả tài xế và đơn hàng
+      const [driversRes, ordersRes] = await Promise.all([
+        axiosInstance.get('/users'),
+        axiosInstance.get('/orders')
+      ]);
+      setDrivers(driversRes.data);
+      setAllOrders(ordersRes.data);
     } catch (error) {
-      console.error("Lỗi tải danh sách tài xế:", error);
+      console.error("Lỗi tải dữ liệu:", error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDrivers();
+    fetchData();
   }, []);
 
-  // Lọc tìm kiếm theo Tên hoặc Username hoặc SĐT
   const filteredDrivers = drivers.filter(d => 
     d.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
     d.username?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -70,11 +79,30 @@ const DriverManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  // 🌟 Hàm xử lý khi bấm nút View (Xem đơn hàng)
+  const handleViewOrders = (driver: any) => {
+    setSelectedDriverForOrders(driver);
+    // Lọc các đơn hàng có assigned_driver_id hoặc driver.id trùng với id của tài xế này
+    // (Tùy thuộc vào cấu trúc JSON backend trả về, mình check cả 2 trường hợp)
+    const filteredOrders = allOrders.filter(o => 
+      o.driver?.id === driver.id || o.assigned_driver_id === driver.id
+    );
+    
+    // Sắp xếp đơn hàng mới nhất lên đầu
+    const sortedOrders = filteredOrders.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+    });
+
+    setDriverOrders(sortedOrders);
+    setIsOrderModalOpen(true);
+  };
+
   const validateForm = () => {
     let newErrors: any = {};
     let isValid = true;
 
-    // 🌟 Validate Username
     if (!formData.username.trim()) { 
         newErrors.username = 'Tên đăng nhập không được để trống'; 
         isValid = false; 
@@ -85,7 +113,6 @@ const DriverManagement: React.FC = () => {
 
     if (!formData.fullName.trim()) { newErrors.fullName = 'Tên tài xế không được để trống'; isValid = false; }
     
-    // 🌟 Validate Phone
     const phoneRegex = /^(0|\+84)\d{9,10}$/;
     if (!formData.phone.trim()) { newErrors.phone = 'Số điện thoại không được để trống'; isValid = false; }
     else if (!phoneRegex.test(formData.phone.trim())) { newErrors.phone = 'Số điện thoại không hợp lệ'; isValid = false; }
@@ -108,7 +135,7 @@ const DriverManagement: React.FC = () => {
         setSuccessMsg("Thêm mới tài xế thành công!");
       }
       
-      fetchDrivers();
+      fetchData();
       setTimeout(() => {
         setIsModalOpen(false);
         setSuccessMsg('');
@@ -124,10 +151,23 @@ const DriverManagement: React.FC = () => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa tài xế [${name}] không? Hành động này không thể hoàn tác.`)) {
       try {
         await axiosInstance.delete(`/users/${id}`);
-        fetchDrivers();
+        fetchData();
       } catch (error) {
         alert("Không thể xóa tài xế này vì đang có đơn hàng liên kết!");
       }
+    }
+  };
+
+  // Helper hàm lấy màu trạng thái đơn hàng
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'DELIVERED': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'SUCCESS': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'PENDING': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'ASSIGNED': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'CANCELED': 
+      case 'FAILED': return 'bg-red-100 text-red-700 border-red-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
@@ -211,6 +251,10 @@ const DriverManagement: React.FC = () => {
                     </td>
                     <td className="p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* 🌟 Nút View đơn hàng mới thêm vào */}
+                        <button onClick={() => handleViewOrders(driver)} className="p-2.5 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="Xem danh sách đơn">
+                            <Eye size={18} />
+                        </button>
                         <button onClick={() => handleOpenEditModal(driver)} className="p-2.5 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Chỉnh sửa">
                             <Edit size={18} />
                         </button>
@@ -251,7 +295,6 @@ const DriverManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* 🌟 Ô NHẬP TÊN ĐĂNG NHẬP */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Tên đăng nhập (Username)</label>
                 <input 
@@ -259,7 +302,7 @@ const DriverManagement: React.FC = () => {
                   className={`w-full p-3.5 bg-slate-50 border rounded-2xl outline-none transition-all text-sm font-medium ${errors.username ? 'border-red-400 focus:ring-4 focus:ring-red-500/10' : 'border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500'} ${isEditing ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`} 
                   value={formData.username} 
                   onChange={e => { setFormData({...formData, username: e.target.value}); setErrors({...errors, username: ''}); }}
-                  disabled={isEditing} // Đóng băng username khi sửa để tránh lỗi DB
+                  disabled={isEditing}
                 />
                 {errors.username && <p className="text-red-500 text-[10px] font-bold mt-1 ml-1">{errors.username}</p>}
               </div>
@@ -319,6 +362,67 @@ const DriverManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 🌟 MODAL XEM CHI TIẾT DANH SÁCH ĐƠN HÀNG CỦA TÀI XẾ */}
+      {isOrderModalOpen && selectedDriverForOrders && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl flex flex-col h-[80vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            {/* Header của Modal Đơn hàng */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <Package size={24} />
+                 </div>
+                 <div>
+                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Danh sách vận đơn</h2>
+                    <p className="text-sm font-medium text-slate-500 mt-0.5">
+                        Tài xế: <span className="font-bold text-blue-600">{selectedDriverForOrders.fullName}</span> 
+                        <span className="text-slate-300 mx-2">|</span> 
+                        Tổng cộng: <span className="font-bold">{driverOrders.length}</span> đơn
+                    </p>
+                 </div>
+              </div>
+              <button onClick={() => setIsOrderModalOpen(false)} className="p-2 bg-white border border-slate-200 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+                  <X size={20}/>
+              </button>
+            </div>
+
+            {/* Body của Modal Đơn hàng */}
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scrollbar">
+                {driverOrders.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+                        <Package size={48} className="text-slate-200" />
+                        <p className="font-medium">Tài xế này chưa được gán đơn hàng nào.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {driverOrders.map((order) => (
+                            <div key={order.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-indigo-300 transition-all">
+                                <div className="flex justify-between items-start mb-3">
+                                    <span className="font-black text-slate-800 text-lg">{order.orderCode}</span>
+                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${getStatusStyle(order.status)}`}>
+                                        {order.status}
+                                    </span>
+                                </div>
+                                <div className="space-y-1.5 text-sm text-slate-600">
+                                    <p><span className="font-semibold text-slate-400">Khách hàng:</span> {order.customerName}</p>
+                                    <p><span className="font-semibold text-slate-400">SĐT:</span> {order.customerPhone}</p>
+                                    <p className="line-clamp-2"><span className="font-semibold text-slate-400">Địa chỉ:</span> {order.deliveryAddress}</p>
+                                    <p className="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-50">
+                                        Ngày tạo: {new Date(order.createdAt || Date.now()).toLocaleDateString('vi-VN')}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

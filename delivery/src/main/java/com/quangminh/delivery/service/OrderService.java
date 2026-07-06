@@ -14,10 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
@@ -72,7 +70,6 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
-    // Đã gộp 2 hàm completeDelivery thành 1 hàm duy nhất, chuẩn xác
     @Transactional
     public Order completeDelivery(UUID orderId, DeliveryCompleteDTO dto) {
         Order order = getOrderById(orderId);
@@ -90,9 +87,26 @@ public class OrderService {
         List<Order> allOrders = orderRepository.findAll();
         long total = allOrders.size();
         long delivered = allOrders.stream().filter(o -> "DELIVERED".equals(o.getStatus()) || "SUCCESS".equals(o.getStatus())).count();
-        long canceled = allOrders.stream().filter(o -> "CANCELED".equals(o.getStatus())).count();
+        long canceled = allOrders.stream().filter(o -> "CANCELED".equals(o.getStatus()) || "FAILED".equals(o.getStatus())).count();
         long delivering = allOrders.stream().filter(o -> "DELIVERING".equals(o.getStatus())).count();
         long assigned = allOrders.stream().filter(o -> "ASSIGNED".equals(o.getStatus())).count();
+
+        // LẤY DANH SÁCH HOẠT ĐỘNG GẦN ĐÂY CỦA TÀI XẾ (MỚI NHẤT -> CŨ NHẤT)
+        // Chỉ lấy các đơn đã hoàn thành hoặc thất bại (Có thời gian updatedAt)
+        List<Map<String, Object>> recentActivities = allOrders.stream()
+                .filter(o -> o.getUpdatedAt() != null && o.getDriver() != null)
+                .sorted(Comparator.comparing(Order::getUpdatedAt).reversed()) // Sắp xếp giảm dần theo thời gian
+                .limit(10) // Chỉ lấy 10 hoạt động gần nhất để tránh nặng Web
+                .map(o -> {
+                    Map<String, Object> activity = new HashMap<>();
+                    activity.put("orderCode", o.getOrderCode());
+                    activity.put("driverName", o.getDriver().getFullName());
+                    activity.put("customerName", o.getCustomerName());
+                    activity.put("status", o.getStatus());
+                    activity.put("timestamp", o.getUpdatedAt());
+                    return activity;
+                })
+                .collect(Collectors.toList());
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalOrders", total);
@@ -101,6 +115,9 @@ public class OrderService {
         stats.put("deliveringOrders", delivering);
         stats.put("assignedOrders", assigned);
         stats.put("successRate", total == 0 ? 0 : Math.round(((double) delivered / total) * 100.0 * 10.0) / 10.0);
+
+        // Gắn thêm danh sách hoạt động vào payload trả về
+        stats.put("recentActivities", recentActivities);
 
         return stats;
     }

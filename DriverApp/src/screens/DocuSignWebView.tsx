@@ -97,7 +97,6 @@ export default function DocuSignWebView() {
         javaScriptEnabled={true}
         domStorageEnabled={true}
         onError={async () => {
-            // Backup nếu Webview không phản hồi do chặn domain redirect
             await changeStatusToDelivered();
             navigation.navigate('OrderList' as never);
         }}

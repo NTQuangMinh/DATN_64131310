@@ -31,7 +31,7 @@ public class PdfGeneratorService {
 
         try {
             PdfWriter writer = new PdfWriter(dest);
-            PdfDocument pdf = new PdfDocument(writer); // Biến gốc tên là "pdf"
+            PdfDocument pdf = new PdfDocument(writer);
             Document document = new Document(pdf);
 
             // Nạp Font bằng ClassPathResource
@@ -89,7 +89,7 @@ public class PdfGeneratorService {
 
             document.close();
 
-            System.out.println("Đã tạo PDF thành công (chạy ngầm): " + dest);
+            System.out.println("Đã tạo PDF thành công: " + dest);
             return dest;
         } catch (Exception e) {
             System.err.println("Lỗi khi sinh file PDF: " + e.getMessage());

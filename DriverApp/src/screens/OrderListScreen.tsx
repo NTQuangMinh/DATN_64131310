@@ -10,8 +10,8 @@ import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from '../api/axiosInstance';
 import { useLocationTracking } from '../hooks/useLocationTracking'; 
-import { Ionicons } from '@expo/vector-icons'; // Thêm icon
-import ChangePasswordModal from '../screens/ChangePasswordModal'; // Đảm bảo đúng đường dẫn tới file Modal của bạn
+import { Ionicons } from '@expo/vector-icons';
+import ChangePasswordModal from '../screens/ChangePasswordModal'; 
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,17 +23,14 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
   const [routeCoords, setRouteCoords] = useState<any[]>([]); 
   const [selectedOrders, setSelectedOrders] = useState<any[]>([]);
   
-  // State quản lý Modal chi tiết đơn hàng
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  // 🌟 STATE QUẢN LÝ MODAL ĐỔI MẬT KHẨU
   const [isChangePwdOpen, setIsChangePwdOpen] = useState(false);
   
   const mapRef = useRef<MapView>(null);
   const isFocused = useIsFocused();
 
-  // Bắn vị trí định vị ngầm
   useLocationTracking();
 
   useEffect(() => {
@@ -108,7 +105,6 @@ const OrderListScreen = ({ navigation, onLogout }: any) => {
     }
   };
 
-  // 🌟 ĐÃ SỬA: Hàm Check-in trước khi Ký nhận (Ghi nhận checkinTime)
   const handleCheckin = async (orderId: string) => {
     try {
       setLoading(true);
